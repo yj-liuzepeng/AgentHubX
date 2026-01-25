@@ -209,11 +209,11 @@ class WorkSpaceSimpleAgent:
                     contexts=[contexts.model_dump()],
                     agent=WorkSpaceAgents.SimpleAgent.value))
 
-
     async def astream(self, messages: List[BaseMessage]):
         if not self._initialized:
             await self.init_simple_agent()
         user_messages = copy.deepcopy(messages)
+        final_answer = ""
 
         generate_title_task = asyncio.create_task(
             self._generate_title(user_messages[-1].content))
@@ -236,14 +236,13 @@ class WorkSpaceSimpleAgent:
         messages = user_messages + messages
 
         async for chunk in self.model.astream(input=messages, config={"callbacks": [usage_metadata_callback]}):
-            logger.error(f"SimpleAgent Model Error: {err}")
+            final_answer += chunk.content
             yield {
                 "event": "task_result",
+                "data": {
                     "message": chunk.content
-                    "message": "抱歉，处理您的请求时遇到了问题，请稍后重试。"
                 }
-            final_answer += chunk.content
-            final_answer = "抱歉，处理您的请求时遇到了问题，请稍后重试。"
+            }
 
         await generate_title_task
         title = generate_title_task.result() if generate_title_task.done() else None

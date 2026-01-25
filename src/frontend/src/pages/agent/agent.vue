@@ -4,11 +4,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Edit, Delete, View, Search, Refresh, Tools } from '@element-plus/icons-vue'
 import robotIcon from '../../assets/robot.svg'
-import { 
-  getAgentsAPI, 
-  deleteAgentAPI, 
+import {
+  getAgentsAPI,
+  deleteAgentAPI,
   searchAgentsAPI,
-  type AgentResponse 
+  type AgentResponse
 } from '../../apis/agent'
 import { Agent } from '../../type'
 
@@ -47,16 +47,16 @@ const fetchAgents = async () => {
     // console.log('开始调用智能体API...')
     // console.log('请求URL: /api/v1/agent')
     // console.log('Token:', localStorage.getItem('token'))
-    
+
     const response = await getAgentsAPI()
     // console.log('API响应:', response)
     // console.log('响应数据:', response.data)
-    
+
     // 兼容不同的后端响应格式
     const responseCode = response.data.status_code || response.data.status_code
     const responseMessage = response.data.status_message || response.data.status_message
     const responseData = response.data.data
-    
+
     if (responseCode === 200 || response.data.status_code === 200) {
       // console.log('API调用成功，智能体数据:', responseData)
       if (responseData && Array.isArray(responseData)) {
@@ -75,7 +75,7 @@ const fetchAgents = async () => {
     console.error('错误类型:', typeof error)
     console.error('错误信息:', error.message)
     console.error('错误响应:', error.response)
-    
+
     if (error.response) {
       console.error('响应状态码:', error.response.status)
       console.error('响应数据:', error.response.data)
@@ -97,7 +97,7 @@ const searchAgents = async () => {
     await fetchAgents()
     return
   }
-  
+
   searchLoading.value = true
   try {
     const response = await searchAgentsAPI({ name: searchKeyword.value.trim() })
@@ -145,7 +145,7 @@ const editAgent = (agent: Agent) => {
     ElMessage.warning(`"${agent.name}" 是官方智能体，无法编辑。`)
     return
   }
-  
+
   router.push({
     path: '/agent/editor',
     query: { id: agent.agent_id }
@@ -170,7 +170,7 @@ const deleteAgent = (agent: Agent) => {
     ElMessage.error('官方智能体不能删除')
     return
   }
-  
+
   // 显示确认对话框
   agentToDelete.value = agent
   showConfirmDialog.value = true
@@ -179,10 +179,10 @@ const deleteAgent = (agent: Agent) => {
 // 确认删除
 const confirmDelete = async () => {
   if (!agentToDelete.value) return
-  
+
   try {
     //ElMessage.info('正在删除智能体...')
-    
+
     const response = await deleteAgentAPI({ agent_id: agentToDelete.value.agent_id })
     if (response.data.status_code === 200) {
       ElMessage.success('删除成功')
@@ -241,44 +241,19 @@ onMounted(() => {
       <div class="header-actions">
         <div class="search-box">
           <div class="search-input-wrapper">
-            <el-input
-              v-model="searchKeyword"
-              placeholder="🔍 搜索智能体名称..."
-              @keyup.enter="searchAgents"
-              @clear="clearSearch"
-              clearable
-              size="large"
-              style="width: 320px"
-            />
-            <el-button 
-              type="primary" 
-              :icon="Search" 
-              @click="searchAgents"
-              :loading="searchLoading"
-              size="large"
-              style="margin-left: 12px; border-radius: 12px;"
-            >
+            <el-input v-model="searchKeyword" placeholder="🔍 搜索智能体名称..." @keyup.enter="searchAgents"
+              @clear="clearSearch" clearable size="large" style="width: 320px" />
+            <el-button type="primary" :icon="Search" @click="searchAgents" :loading="searchLoading" size="large"
+              style="margin-left: 12px; border-radius: 12px;">
               搜索
             </el-button>
           </div>
         </div>
         <div class="action-buttons">
-          <el-button 
-            :icon="Refresh" 
-            @click="refreshAgents"
-            :loading="loading"
-            title="刷新列表"
-            size="large"
-            circle
-            style="border-radius: 12px;"
-          />
-          <el-button 
-            type="primary" 
-            :icon="Plus" 
-            @click="createAgent"
-            size="large"
-            style="border-radius: 12px; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); border: none;"
-          >
+          <el-button :icon="Refresh" @click="refreshAgents" :loading="loading" title="刷新列表" size="large" circle
+            style="border-radius: 12px;" />
+          <el-button type="primary" :icon="Plus" @click="createAgent" size="large"
+            style="border-radius: 12px; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); border: none;">
             🤖 创建智能体
           </el-button>
         </div>
@@ -287,38 +262,25 @@ onMounted(() => {
 
     <div class="agent-list" v-loading="loading">
       <div class="agent-grid" v-if="agents.length > 0">
-        <div 
-          v-for="agent in agents" 
-          :key="agent.agent_id" 
-          class="agent-card"
-          :class="{'official-agent': agent.is_custom === false}"
-          @click="agent.is_custom !== false ? editAgent(agent) : showSystemAgentMessage(agent)"
-        >
+        <div v-for="agent in agents" :key="agent.agent_id" class="agent-card"
+          :class="{ 'official-agent': agent.is_custom === false }"
+          @click="agent.is_custom !== false ? editAgent(agent) : showSystemAgentMessage(agent)">
           <!-- 删除按钮 - 仅对自定义智能体显示 -->
-          <div 
-            v-if="agent.is_custom !== false" 
-            class="delete-icon" 
-            @click.stop="deleteAgent(agent)" 
-            title="删除"
-          >×</div>
-          
+          <div v-if="agent.is_custom !== false" class="delete-icon" @click.stop="deleteAgent(agent)" title="删除">×</div>
+
           <!-- 官方智能体标识 -->
           <div v-if="agent.is_custom === false" class="official-badge">官方</div>
-          
+
           <div class="agent-avatar">
-            <img 
-              :src="agent.logo_url || '/src/assets/robot.svg'" 
-              :alt="agent.name"
-              @error="handleImageError"
-            />
+            <img :src="agent.logo_url || '/src/assets/robot.svg'" :alt="agent.name" @error="handleImageError" />
           </div>
-          
+
           <div class="agent-info">
             <h3 class="agent-name" :title="agent.name">{{ agent.name }}</h3>
             <p class="agent-description" :title="agent.description">
               {{ agent.description }}
             </p>
-            
+
             <div class="agent-meta">
               <span class="meta-item" title="可用工具数量">
                 <i class="meta-icon">🔨</i>
@@ -336,7 +298,7 @@ onMounted(() => {
           </div>
         </div>
       </div>
-      
+
       <div v-else-if="!loading" class="empty-state">
         <div class="empty-icon">
           <i class="empty-icon-symbol">🤖</i>
@@ -350,18 +312,10 @@ onMounted(() => {
           创建您的第一个智能体，开始智能对话体验
         </p>
         <div class="empty-actions">
-          <el-button 
-            v-if="searchKeyword" 
-            type="primary" 
-            @click="clearSearch"
-          >
+          <el-button v-if="searchKeyword" type="primary" @click="clearSearch">
             查看所有智能体
           </el-button>
-          <el-button 
-            v-else
-            type="primary"
-            @click="createAgent"
-          >
+          <el-button v-else type="primary" @click="createAgent">
             创建智能体
           </el-button>
         </div>
@@ -390,7 +344,7 @@ onMounted(() => {
   padding: 32px;
   min-height: 100vh;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  
+
   .page-header {
     display: flex;
     justify-content: space-between;
@@ -401,17 +355,17 @@ onMounted(() => {
     border-radius: 16px; // 减小了border-radius
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06); // 减小了阴影
     border: 1px solid rgba(226, 232, 240, 0.6);
-    
+
     .header-title {
       display: flex;
       align-items: center;
       gap: 14px;
-      
+
       .title-icon {
         width: 36px;
         height: 36px;
       }
-      
+
       h2 {
         margin: 0;
         font-size: 24px;
@@ -422,12 +376,12 @@ onMounted(() => {
         background-clip: text;
       }
     }
-    
+
     .header-actions {
       display: flex;
       align-items: center;
       gap: 32px;
-      
+
       .search-box {
         .search-input-wrapper {
           display: flex;
@@ -437,19 +391,19 @@ onMounted(() => {
           border-radius: 16px;
           border: 1px solid rgba(59, 130, 246, 0.2);
           box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
-          
+
           :deep(.el-input) {
             .el-input__wrapper {
               background: transparent;
               border: none;
               box-shadow: none;
               border-radius: 12px;
-              
+
               .el-input__inner {
                 font-size: 15px;
                 font-weight: 500;
                 color: #1e293b;
-                
+
                 &::placeholder {
                   color: #64748b;
                   font-weight: 400;
@@ -459,16 +413,16 @@ onMounted(() => {
           }
         }
       }
-      
+
       .action-buttons {
         display: flex;
         gap: 16px;
-        
+
         :deep(.el-button) {
           font-weight: 600;
           font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          
+
           &:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
@@ -477,16 +431,16 @@ onMounted(() => {
       }
     }
   }
-  
+
   .agent-list {
     height: calc(100vh - 140px);
     overflow-y: auto;
-    
+
     .agent-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 16px;
-      
+
       .agent-card {
         background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
         border-radius: 20px;
@@ -494,35 +448,36 @@ onMounted(() => {
         height: 200px;
         box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
         border: 1px solid rgba(226, 232, 240, 0.8);
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
         position: relative;
         display: flex;
         flex-direction: column;
-        cursor: pointer; /* Add cursor pointer for clickability */
-        
+        cursor: pointer;
+        will-change: transform;
+
         &:hover {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
           transform: translateY(-4px);
-          
+
           .delete-icon {
             opacity: 1;
             transform: scale(1);
           }
         }
-        
+
         // 系统智能体样式
         &.official-agent {
           background: linear-gradient(145deg, #fffaf0 0%, #fff8e5 100%);
           border: 1px solid rgba(255, 152, 0, 0.3);
-          
+
           &:hover {
             box-shadow: 0 8px 24px rgba(255, 152, 0, 0.15);
           }
-          
+
           .agent-name {
             color: #d87300 !important;
           }
-          
+
           .agent-meta {
             .meta-item {
               background: rgba(255, 243, 224, 0.5);
@@ -530,7 +485,7 @@ onMounted(() => {
             }
           }
         }
-        
+
         .delete-icon {
           position: absolute;
           top: 10px;
@@ -548,13 +503,18 @@ onMounted(() => {
           cursor: pointer;
           z-index: 1;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-          transition: all 0.3s ease;
+          transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.2s ease;
           opacity: 0;
           transform: scale(0.8);
+          pointer-events: none;
 
           &:hover {
             background-color: #ff7a7a;
           }
+        }
+
+        &:hover .delete-icon {
+          pointer-events: auto;
         }
 
         .official-badge {
@@ -570,8 +530,8 @@ onMounted(() => {
           z-index: 1;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
-        
-        
+
+
         .agent-avatar {
           width: 48px;
           height: 48px;
@@ -579,20 +539,20 @@ onMounted(() => {
           overflow: hidden;
           margin-bottom: 12px;
           border: 2px solid #f0f0f0;
-          
+
           img {
             width: 100%;
             height: 100%;
             object-fit: cover;
           }
         }
-        
+
         .agent-info {
           flex: 1;
           overflow: hidden;
           display: flex;
           flex-direction: column;
-          
+
           .agent-name {
             font-size: 16px;
             font-weight: 600;
@@ -602,7 +562,7 @@ onMounted(() => {
             text-overflow: ellipsis;
             white-space: nowrap;
           }
-          
+
           .agent-description {
             color: #64748b;
             font-size: 14px;
@@ -615,14 +575,14 @@ onMounted(() => {
             min-height: 32px;
             flex: 1;
           }
-          
+
           .agent-meta {
             display: flex;
             justify-content: space-around;
             gap: 8px;
             margin-top: auto;
             padding-top: 10px;
-            
+
             .meta-item {
               font-size: 12px;
               color: #64748b;
@@ -630,37 +590,38 @@ onMounted(() => {
               align-items: center;
               justify-content: center;
               gap: 4px;
-              background: rgba(255, 255, 255, 0.3); /* 半透明背景 */
+              background: rgba(255, 255, 255, 0.3);
               padding: 6px;
               border-radius: 8px;
               min-width: 45px;
               text-align: center;
               box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-              backdrop-filter: blur(2px); /* 轻微模糊效果 */
-              
+              transition: none;
+
               .meta-icon {
                 font-size: 14px;
               }
-              
+
               .meta-count {
                 font-size: 15px;
                 font-weight: 600;
               }
             }
           }
-          
+
           .agent-status {
             margin-top: 12px;
           }
         }
-        
+
         .agent-actions {
           display: flex;
           gap: 8px;
           margin-top: 8px;
           justify-content: space-between;
-          
-          .el-button, .custom-delete-btn {
+
+          .el-button,
+          .custom-delete-btn {
             flex: 1;
             text-align: center;
             padding: 6px 0;
@@ -669,7 +630,7 @@ onMounted(() => {
         }
       }
     }
-    
+
     .empty-state {
       text-align: center;
       padding: 80px 20px;
@@ -677,7 +638,7 @@ onMounted(() => {
       background: white;
       border-radius: 16px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-      
+
       p {
         margin-top: 24px;
         font-size: 16px;
@@ -727,7 +688,8 @@ onMounted(() => {
       justify-content: center;
       gap: 20px;
 
-      .btn-cancel, .btn-confirm {
+      .btn-cancel,
+      .btn-confirm {
         padding: 10px 20px;
         border-radius: 8px;
         font-size: 16px;
@@ -740,7 +702,7 @@ onMounted(() => {
         background-color: #f5f5f5;
         color: #333;
         border: 1px solid #ddd;
-        
+
         &:hover {
           background-color: #e5e5e5;
         }
@@ -750,12 +712,12 @@ onMounted(() => {
         background-color: #f56c6c;
         color: white;
         border: none;
-        
+
         &:hover {
           background-color: #ff8080;
           transform: scale(1.05);
         }
-        
+
         &:active {
           transform: scale(0.95);
         }
@@ -794,46 +756,46 @@ onMounted(() => {
 @media (max-width: 767px) {
   .agent-page {
     padding: 16px;
-    
+
     .page-header {
       flex-direction: column;
       gap: 16px;
       align-items: stretch;
       padding: 16px; // 减小了padding
-      
+
       .header-title {
         .title-icon {
           width: 28px;
           height: 28px;
         }
-        
+
         h2 {
           font-size: 24px;
         }
       }
-      
+
       .header-actions {
         flex-direction: column;
         gap: 16px;
-        
+
         .search-box {
           .search-input-wrapper {
             flex-direction: column;
             gap: 12px;
             padding: 12px;
-            
+
             .el-input {
               width: 100% !important;
             }
           }
         }
-        
+
         .action-buttons {
           justify-content: center;
         }
       }
     }
-    
+
     .agent-list .agent-grid {
       grid-template-columns: 1fr;
       gap: 16px;
@@ -851,7 +813,7 @@ onMounted(() => {
   text-align: center;
   margin: 20px auto;
   max-width: 600px;
-  
+
   .empty-icon {
     width: 120px;
     height: 120px;
@@ -861,28 +823,28 @@ onMounted(() => {
     background: rgba(64, 158, 255, 0.1);
     border-radius: 50%;
     margin-bottom: 20px;
-    
+
     .empty-icon-symbol {
       font-size: 60px;
     }
   }
-  
+
   h3 {
     font-size: 20px;
     color: #303133;
     margin: 0 0 16px;
   }
-  
+
   p {
     margin: 0 0 20px;
     font-size: 16px;
     color: #909399;
     max-width: 300px;
   }
-  
+
   .empty-actions {
     display: flex;
     gap: 12px;
   }
 }
-</style> 
+</style>

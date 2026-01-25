@@ -81,22 +81,22 @@ async def workspace_simple_chat(simple_task: WorkSpaceSimpleTask,
             "api_key": model_config["api_key"],
             "user_id": login_user.user_id,
         },
-        session_id=simple_task.session_id
         user_id=login_user.user_id,
         session_id=simple_task.session_id,
-        knowledge_ids=simple_task.knowledge_ids
+        plugins=simple_task.plugins,
+        mcp_configs=servers_config
     )
 
     workspace_session = await WorkSpaceSessionService.get_workspace_session_from_id(simple_task.session_id, login_user.user_id)
+    history_messages = []
     if workspace_session:
         contexts = workspace_session.get("contexts", [])
         history_messages = [
             f"query: {message.get("query")}, answer: {message.get("answer")}\n" for message in contexts]
-        async for chunk in simple_agent.astream([SystemMessage(content=SYSTEM_PROMPT.format(history=str(history_messages))), HumanMessage(content=simple_task.query)]):
+
     async def general_generate():
         # 使用包含工具信息的系统消息
-        system_message = simple_agent._generate_system_message_with_tools(
-            str(history_messages))
+        system_message = SYSTEM_PROMPT.format(history=str(history_messages))
         async for chunk in simple_agent.astream([SystemMessage(content=system_message), HumanMessage(content=simple_task.query)]):
             # chunk 已经是 dict: {"event": "task_result", "data": {"message": "..."}}
             # 需要 JSON 序列化后作为 SSE 的 data 字段
