@@ -435,7 +435,7 @@ watch(
                 <span class="loading-text">AI正在思考中...</span>
               </div>
               <!-- 实际内容 - 有内容时显示 -->
-              <MdPreview v-if="msg.content" :editorId="'workspace-ai-' + idx" :modelValue="msg.content" />
+              <MdPreview v-if="msg.content" :editorId="'workspace-ai-' + idx" :modelValue="msg.content" noImgZoom />
             </div>
           </div>
         </div>

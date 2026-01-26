@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
-import { 
-  generateLingSeekGuidePromptAPI, 
+import {
+  generateLingSeekGuidePromptAPI,
   regenerateLingSeekGuidePromptAPI
 } from '../../../apis/lingseek'
 import { getWorkspaceSessionInfoAPI } from '../../../apis/workspace'
@@ -38,20 +38,20 @@ const toggleExpand = (index: number) => {
 // Markdown 渲染函数（增强版）
 const parseMarkdown = (text: string): string => {
   if (!text) return ''
-  
+
   let html = text
-  
+
   // 1. 先处理代码块（避免代码块内容被误处理）
   html = html.replace(/```([\s\S]*?)```/gim, (match, code) => {
     return `<pre><code>${code}</code></pre>`
   })
-  
+
   // 2. 处理标题（按从多到少的顺序）
   html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>')
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>')
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>')
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>')
-  
+
   // 3. 处理嵌套列表（支持多级缩进）
   // 先标记所有列表项的层级（根据缩进）
   const lines = html.split('\n')
@@ -59,17 +59,17 @@ const parseMarkdown = (text: string): string => {
     // 三级列表（6个空格或3个tab + -）
     if (/^      - (.*)$/.test(line) || /^\t\t\t- (.*)$/.test(line)) {
       return line.replace(/^      - (.*)$/, '<li-ul-3>$1</li-ul-3>')
-                 .replace(/^\t\t\t- (.*)$/, '<li-ul-3>$1</li-ul-3>')
+        .replace(/^\t\t\t- (.*)$/, '<li-ul-3>$1</li-ul-3>')
     }
     // 二级列表（4个空格或2个tab + -）
     if (/^    - (.*)$/.test(line) || /^\t\t- (.*)$/.test(line)) {
       return line.replace(/^    - (.*)$/, '<li-ul-2>$1</li-ul-2>')
-                 .replace(/^\t\t- (.*)$/, '<li-ul-2>$1</li-ul-2>')
+        .replace(/^\t\t- (.*)$/, '<li-ul-2>$1</li-ul-2>')
     }
     // 二级列表（2个空格或1个tab + -）
     if (/^  - (.*)$/.test(line) || /^\t- (.*)$/.test(line)) {
       return line.replace(/^  - (.*)$/, '<li-ul-2>$1</li-ul-2>')
-                 .replace(/^\t- (.*)$/, '<li-ul-2>$1</li-ul-2>')
+        .replace(/^\t- (.*)$/, '<li-ul-2>$1</li-ul-2>')
     }
     // 一级无序列表
     if (/^- (.*)$/.test(line)) {
@@ -82,59 +82,62 @@ const parseMarkdown = (text: string): string => {
     return line
   })
   html = processedLines.join('\n')
-  
+
   // 4. 处理三级列表
   html = html.replace(/(<li-ul-3>.*?<\/li-ul-3>(\n)*)+/gim, (match) => {
     const items = match.replace(/<li-ul-3>/g, '<li>').replace(/<\/li-ul-3>/g, '</li>')
     return '<ul class="list-level-3">' + items + '</ul>'
   })
-  
+
   // 5. 处理二级列表
   html = html.replace(/(<li-ul-2>.*?<\/li-ul-2>(\n)*)+/gim, (match) => {
     const items = match.replace(/<li-ul-2>/g, '<li>').replace(/<\/li-ul-2>/g, '</li>')
     return '<ul class="list-level-2">' + items + '</ul>'
   })
-  
+
   // 6. 处理一级无序列表
   html = html.replace(/(<li-ul-1>.*?<\/li-ul-1>(\n)*)+/gim, (match) => {
     const items = match.replace(/<li-ul-1>/g, '<li>').replace(/<\/li-ul-1>/g, '</li>')
     return '<ul class="list-level-1">' + items + '</ul>'
   })
-  
+
   // 7. 处理有序列表
   html = html.replace(/(<li-ol>.*?<\/li-ol>(\n)*)+/gim, (match) => {
     const items = match.replace(/<li-ol>/g, '<li>').replace(/<\/li-ol>/g, '</li>')
     return '<ol>' + items + '</ol>'
   })
-  
+
   // 8. 处理粗体（** 或 __）
   html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
   html = html.replace(/__(.*?)__/gim, '<strong>$1</strong>')
-  
+
   // 9. 处理斜体（* 或 _，但要避免与粗体冲突）
   html = html.replace(/(?<!\*)\*(?!\*)([^\*]+)\*(?!\*)/gim, '<em>$1</em>')
   html = html.replace(/(?<!_)_(?!_)([^_]+)_(?!_)/gim, '<em>$1</em>')
-  
+
   // 10. 处理行内代码
   html = html.replace(/`([^`]+)`/gim, '<code>$1</code>')
-  
-  // 11. 处理链接 [text](url)
+
+  // 新增：处理图片链接 ![alt](url)
+  html = html.replace(/!\[([^\]]*)\]\(([^\)]+)\)/gim, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; margin: 10px 0;" />')
+
+  // 11. 处理链接 [text](url) - 注意要在图片之后处理，避免冲突
   html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/gim, '<a href="$2" target="_blank">$1</a>')
-  
+
   // 12. 处理引用（> 开头）
   html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
-  
+
   // 13. 处理分隔线（--- 或 ***）
   html = html.replace(/^(---|\*\*\*)$/gim, '<hr>')
-  
+
   // 14. 处理换行（两个空格+换行 或 单独的换行）
   html = html.replace(/  \n/g, '<br>')
   html = html.replace(/\n\n+/g, '</p><p>')  // 双换行或多换行才分段
   html = html.replace(/\n/g, '<br>')
-  
+
   // 15. 包裹段落
   html = '<p>' + html + '</p>'
-  
+
   // 16. 清理多余的空段落
   html = html.replace(/<p><\/p>/g, '')
   html = html.replace(/<p>(<h[1-6]>)/g, '$1')
@@ -148,7 +151,7 @@ const parseMarkdown = (text: string): string => {
   html = html.replace(/<p>(<blockquote>)/g, '$1')
   html = html.replace(/(<\/blockquote>)<\/p>/g, '$1')
   html = html.replace(/<p>(<hr>)<\/p>/g, '$1')
-  
+
   return html
 }
 
@@ -188,10 +191,10 @@ watch(guidePrompt, (newVal) => {
 onMounted(async () => {
   console.log('=== workspacePage onMounted 开始 ===')
   console.log('路由参数:', route.query)
-  
+
   // 检查是否是打开已有会话
   const sessionId = route.query.session_id as string
-  
+
   if (sessionId) {
     // 打开已有会话，获取会话信息
     console.log('打开已有会话:', sessionId)
@@ -204,11 +207,11 @@ onMounted(async () => {
     // 从路由参数获取信息
     userQuery.value = route.query.query as string || ''
     console.log('userQuery:', userQuery.value)
-    
+
     const tools = route.query.tools as string
     selectedTools.value = tools ? JSON.parse(tools) : []
     console.log('selectedTools:', selectedTools.value)
-    
+
     webSearchEnabled.value = route.query.webSearch === 'true'
     console.log('webSearchEnabled:', webSearchEnabled.value)
 
@@ -219,7 +222,7 @@ onMounted(async () => {
     // 如果有查询内容，立即开始生成（后端会创建会话）
     if (userQuery.value) {
       console.log('检测到 userQuery，开始调用接口')
-      
+
       // 保存第一次生成的参数
       originalParams.value = {
         query: userQuery.value,
@@ -228,13 +231,13 @@ onMounted(async () => {
         plugins: selectedTools.value, // plugins 和 tools 是同一个字段
         mcp_servers: selectedMcpServers
       }
-      
+
       startGenerateGuidePrompt()
     } else {
       console.warn('⚠️ userQuery 为空，不会调用接口')
     }
   }
-  
+
   console.log('=== workspacePage onMounted 结束 ===')
 })
 
@@ -245,7 +248,7 @@ const loadSessionInfo = async (sessionId: string) => {
     if (response.data.status_code === 200) {
       const sessionData = response.data.data
       console.log('会话信息:', sessionData)
-      
+
       // 提取历史记录
       if (sessionData.contexts && Array.isArray(sessionData.contexts)) {
         historyContexts.value = sessionData.contexts
@@ -267,7 +270,7 @@ const startGenerateGuidePrompt = async () => {
   console.log('用户问题:', userQuery.value)
   console.log('选中工具:', selectedTools.value)
   console.log('联网搜索:', webSearchEnabled.value)
-  
+
   guidePrompt.value = ''
   isStreaming.value = true
   isEditable.value = false
@@ -314,7 +317,7 @@ const handleRegenerate = () => {
     ElMessage.warning('请先生成或编辑指导手册')
     return
   }
-  
+
   feedbackText.value = ''
   showFeedbackDialog.value = true
 }
@@ -333,13 +336,13 @@ const handleConfirmRegenerate = async () => {
   }
 
   console.log('开始重新生成，用户反馈:', feedbackText.value)
-  
+
   const currentPrompt = guidePrompt.value
   const feedback = feedbackText.value
-  
+
   // 关闭对话框
   showFeedbackDialog.value = false
-  
+
   // 清空文本框，准备重新输出
   guidePrompt.value = ''
   isStreaming.value = true
@@ -422,25 +425,22 @@ const handleStartTask = () => {
             <span class="history-count">共 {{ historyContexts.length }} 条对话</span>
           </div>
         </div>
-        
+
         <div class="history-content">
-          <div 
-            v-for="(context, index) in historyContexts" 
-            :key="index"
-            class="conversation-item"
-            :class="{ 'expanded': expandedItems.has(index) }"
-          >
+          <div v-for="(context, index) in historyContexts" :key="index" class="conversation-item"
+            :class="{ 'expanded': expandedItems.has(index) }">
             <!-- 对话头部（可点击展开/收起） -->
             <div class="conversation-header" @click="toggleExpand(index)">
               <div class="header-info">
                 <span class="conversation-number">#{{ index + 1 }}</span>
-                <span class="conversation-preview">{{ context.query.substring(0, 100) }}{{ context.query.length > 100 ? '...' : '' }}</span>
+                <span class="conversation-preview">{{ context.query.substring(0, 100) }}{{ context.query.length > 100 ?
+                  '...' : '' }}</span>
               </div>
               <div class="expand-icon">
                 {{ expandedItems.has(index) ? '▼' : '▶' }}
               </div>
             </div>
-            
+
             <!-- 对话内容（可展开） -->
             <div v-show="expandedItems.has(index)" class="conversation-content">
               <!-- 用户问题 -->
@@ -450,13 +450,10 @@ const handleStartTask = () => {
                   <span class="message-title">用户提问</span>
                 </div>
                 <div class="message-body">
-                  <MdPreview 
-                    :editorId="`user-query-${index}`"
-                    :modelValue="context.query"
-                  />
+                  <MdPreview :editorId="`user-query-${index}`" :modelValue="context.query" noImgZoom />
                 </div>
               </div>
-              
+
               <!-- AI回答 -->
               <div class="message-block ai-block">
                 <div class="message-header">
@@ -464,17 +461,14 @@ const handleStartTask = () => {
                   <span class="message-title">AI回答</span>
                 </div>
                 <div class="message-body">
-                  <MdPreview 
-                    :editorId="`ai-answer-${index}`"
-                    :modelValue="context.answer"
-                  />
+                  <MdPreview :editorId="`ai-answer-${index}`" :modelValue="context.answer" noImgZoom />
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-      
+
       <!-- 指导手册编辑器（仅在新建会话时显示） -->
       <div v-if="!isExistingSession" class="editor-section">
         <div class="editor-header">
@@ -500,21 +494,14 @@ const handleStartTask = () => {
             <!-- 左侧：Markdown 原始文本编辑区 -->
             <div class="editor-pane">
               <div class="pane-header">原始文本</div>
-              <textarea
-                v-model="guidePrompt"
-                :readonly="!isEditable"
-                class="markdown-editor"
-                placeholder="正在生成指导手册..."
-              ></textarea>
+              <textarea v-model="guidePrompt" :readonly="!isEditable" class="markdown-editor"
+                placeholder="正在生成指导手册..."></textarea>
             </div>
-            
+
             <!-- 右侧：Markdown 预览区 -->
             <div class="preview-pane">
               <div class="pane-header">预览</div>
-              <div 
-                class="markdown-preview" 
-                v-html="renderedMarkdown"
-              ></div>
+              <div class="markdown-preview" v-html="renderedMarkdown"></div>
             </div>
           </div>
         </div>
@@ -523,20 +510,12 @@ const handleStartTask = () => {
       <!-- 操作按钮区（仅在新建会话时显示） -->
       <div v-if="!isExistingSession" class="action-section">
         <div class="action-buttons">
-          <button
-            @click="handleRegenerate"
-            :disabled="isStreaming"
-            class="action-btn regenerate-btn"
-          >
+          <button @click="handleRegenerate" :disabled="isStreaming" class="action-btn regenerate-btn">
             <span class="btn-icon">🔄</span>
             <span class="btn-text">重新生成</span>
           </button>
-          
-          <button
-            @click="handleStartTask"
-            :disabled="isStreaming || !guidePrompt.trim()"
-            class="action-btn start-btn"
-          >
+
+          <button @click="handleStartTask" :disabled="isStreaming || !guidePrompt.trim()" class="action-btn start-btn">
             <span class="btn-icon">🚀</span>
             <span class="btn-text">开始执行</span>
           </button>
@@ -553,21 +532,16 @@ const handleStartTask = () => {
             <span>×</span>
           </button>
         </div>
-        
+
         <div class="modal-body">
           <p class="feedback-tip">请告诉我您希望如何优化这个指导手册：</p>
           <div class="input-wrapper">
-            <textarea
-              v-model="feedbackText"
-              placeholder="例如：更加详细一些、更简洁、调整某个步骤等..."
-              maxlength="500"
-              class="feedback-textarea"
-              rows="4"
-            ></textarea>
+            <textarea v-model="feedbackText" placeholder="例如：更加详细一些、更简洁、调整某个步骤等..." maxlength="500"
+              class="feedback-textarea" rows="4"></textarea>
             <div class="char-count">{{ feedbackText.length }}/500</div>
           </div>
         </div>
-        
+
         <div class="modal-footer">
           <button @click="handleCancelRegenerate" class="cancel-btn">
             取消
@@ -659,7 +633,12 @@ const handleStartTask = () => {
     // 隐藏滚动条（仍可滚动）
     scrollbar-width: none; // Firefox
     -ms-overflow-style: none; // IE/Edge
-    &::-webkit-scrollbar { display: none; } // WebKit
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    // WebKit
 
     .conversation-item {
       background: white;
@@ -782,13 +761,19 @@ const handleStartTask = () => {
                 color: #374151;
               }
 
-              h1, h2, h3, h4, h5, h6 {
+              h1,
+              h2,
+              h3,
+              h4,
+              h5,
+              h6 {
                 margin: 16px 0 8px 0;
                 font-weight: 600;
                 color: #1f2937;
               }
 
-              ul, ol {
+              ul,
+              ol {
                 margin: 12px 0;
                 padding-left: 24px;
 
@@ -836,7 +821,8 @@ const handleStartTask = () => {
                 width: 100%;
                 margin: 12px 0;
 
-                th, td {
+                th,
+                td {
                   border: 1px solid #e5e7eb;
                   padding: 8px 12px;
                   text-align: left;
@@ -1057,9 +1043,19 @@ const handleStartTask = () => {
           // 隐藏滚动条（仍可滚动）
           scrollbar-width: none; // Firefox
           -ms-overflow-style: none; // IE/Edge
-          &::-webkit-scrollbar { display: none; } // WebKit
-          
-          :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+
+          &::-webkit-scrollbar {
+            display: none;
+          }
+
+          // WebKit
+
+          :deep(h1),
+          :deep(h2),
+          :deep(h3),
+          :deep(h4),
+          :deep(h5),
+          :deep(h6) {
             margin-top: 6px;
             margin-bottom: 0px;
             font-weight: 600;
@@ -1067,37 +1063,42 @@ const handleStartTask = () => {
             color: #1f2937;
           }
 
-          :deep(h1) { 
-            font-size: 1.8em; 
-            border-bottom: 1px solid #e5e7eb; 
+          :deep(h1) {
+            font-size: 1.8em;
+            border-bottom: 1px solid #e5e7eb;
             padding-bottom: 1px;
             margin-top: 8px;
             margin-bottom: 1px;
           }
-          :deep(h2) { 
-            font-size: 1.5em; 
-            border-bottom: 1px solid #f3f4f6; 
+
+          :deep(h2) {
+            font-size: 1.5em;
+            border-bottom: 1px solid #f3f4f6;
             padding-bottom: 1px;
             margin-top: 6px;
             margin-bottom: 0px;
           }
-          :deep(h3) { 
+
+          :deep(h3) {
             font-size: 1.25em;
             margin-top: 4px;
             margin-bottom: 0px;
           }
-          :deep(h4) { 
+
+          :deep(h4) {
             font-size: 1.1em;
             margin-top: 3px;
             margin-bottom: 0px;
           }
-          :deep(h5) { 
+
+          :deep(h5) {
             font-size: 1em;
             margin-top: 3px;
             margin-bottom: 0px;
           }
-          :deep(h6) { 
-            font-size: 0.9em; 
+
+          :deep(h6) {
+            font-size: 0.9em;
             color: #6b7280;
             margin-top: 3px;
             margin-bottom: 0px;
@@ -1110,11 +1111,12 @@ const handleStartTask = () => {
             color: #374151;
           }
 
-          :deep(ul), :deep(ol) {
+          :deep(ul),
+          :deep(ol) {
             padding-left: 1.8em;
             margin-top: 2px;
             margin-bottom: 2px;
-            
+
             li {
               margin-bottom: 0px;
               line-height: 1.4;
@@ -1187,13 +1189,42 @@ const handleStartTask = () => {
             line-height: 1.4;
           }
 
+          :deep(img) {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin: 16px 0;
+            display: block;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+            &:hover {
+              transform: scale(1.02);
+              box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            }
+          }
+
+          :deep(a) {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s ease;
+
+            &:hover {
+              color: #5a67d8;
+              text-decoration: underline;
+            }
+          }
+
           :deep(table) {
             border-collapse: collapse;
             width: 100%;
             margin-top: 3px;
             margin-bottom: 4px;
 
-            th, td {
+            th,
+            td {
               border: 1px solid #e5e7eb;
               padding: 5px 8px;
               text-align: left;
@@ -1312,6 +1343,7 @@ const handleStartTask = () => {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1319,10 +1351,13 @@ const handleStartTask = () => {
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.5;
     transform: scale(0.8);
@@ -1342,7 +1377,8 @@ const handleStartTask = () => {
   .editor-content {
     flex-direction: column !important;
 
-    .editor-pane, .preview-pane {
+    .editor-pane,
+    .preview-pane {
       width: 100% !important;
       height: 50% !important;
     }
@@ -1545,6 +1581,7 @@ const handleStartTask = () => {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -1555,6 +1592,7 @@ const handleStartTask = () => {
     opacity: 0;
     transform: translateY(20px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);

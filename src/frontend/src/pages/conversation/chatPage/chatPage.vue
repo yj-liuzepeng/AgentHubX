@@ -413,18 +413,18 @@ watch(
               </div>
               <template v-else>
                 <div v-if="item.aiMessage.type === 'knowledge'" style="color: #409eff;">
-                  <MdPreview :editorId="'ai-knowledge-' + index" :modelValue="item.aiMessage.content" />
+                  <MdPreview :editorId="'ai-knowledge-' + index" :modelValue="item.aiMessage.content" noImgZoom />
                 </div>
                 <div v-else-if="item.aiMessage.type === 'event'" style="color: #67c23a;">
-                  <MdPreview :editorId="'ai-event-' + index" :modelValue="item.aiMessage.content" />
+                  <MdPreview :editorId="'ai-event-' + index" :modelValue="item.aiMessage.content" noImgZoom />
                 </div>
                 <div v-else-if="item.aiMessage.type === 'error'" style="color: #f56c6c;">
-                  <MdPreview :editorId="'ai-error-' + index" :modelValue="item.aiMessage.content" />
+                  <MdPreview :editorId="'ai-error-' + index" :modelValue="item.aiMessage.content" noImgZoom />
                 </div>
                 <div v-else-if="item.aiMessage.type === 'system'" style="color: #e6a23c;">
-                  <MdPreview :editorId="'ai-system-' + index" :modelValue="item.aiMessage.content" />
+                  <MdPreview :editorId="'ai-system-' + index" :modelValue="item.aiMessage.content" noImgZoom />
                 </div>
-                <MdPreview v-else :editorId="'ai-' + index" :modelValue="item.aiMessage.content" />
+                <MdPreview v-else :editorId="'ai-' + index" :modelValue="item.aiMessage.content" noImgZoom />
               </template>
             </div>
           </div>

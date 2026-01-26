@@ -1,4 +1,5 @@
 import json
+from loguru import logger
 from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.messages import HumanMessage, SystemMessage
 from starlette.responses import StreamingResponse
@@ -66,14 +67,26 @@ async def workspace_simple_chat(simple_task: WorkSpaceSimpleTask,
     set_user_id_context(login_user.user_id)
     set_agent_name_context(UsageStatsAgentType.simple_agent)
 
+    logger.info(f"=== WORKSPACE API 入口开始 ===")
+    logger.info(f"用户ID: {login_user.user_id}")
+    logger.info(f"会话ID: {simple_task.session_id}")
+    logger.info(f"用户查询: {simple_task.query}")
+    logger.info(f"选择的插件: {simple_task.plugins}")
+    logger.info(f"MCP服务器: {simple_task.mcp_servers}")
+    logger.info(f"模型ID: {simple_task.model_id}")
+
     model_config = await LLMService.get_llm_by_id(simple_task.model_id)
+    logger.info(f"获取模型配置: {model_config['model']}")
+
     servers_config = []
     for mcp_id in simple_task.mcp_servers:
         mcp_server = await MCPService.get_mcp_server_from_id(mcp_id)
         servers_config.append(
             MCPConfig(**mcp_server)
         )
+    logger.info(f"MCP服务器配置数量: {len(servers_config)}")
 
+    logger.info("开始创建SimpleAgent实例...")
     simple_agent = WorkSpaceSimpleAgent(
         model_config={
             "model": model_config["model"],
@@ -86,6 +99,7 @@ async def workspace_simple_chat(simple_task: WorkSpaceSimpleTask,
         plugins=simple_task.plugins,
         mcp_configs=servers_config
     )
+    logger.info("SimpleAgent实例创建完成")
 
     workspace_session = await WorkSpaceSessionService.get_workspace_session_from_id(simple_task.session_id, login_user.user_id)
     history_messages = []
@@ -93,15 +107,36 @@ async def workspace_simple_chat(simple_task: WorkSpaceSimpleTask,
         contexts = workspace_session.get("contexts", [])
         history_messages = [
             f"query: {message.get("query")}, answer: {message.get("answer")}\n" for message in contexts]
+        logger.info(f"获取历史会话: 包含 {len(history_messages)} 条历史记录")
+    else:
+        logger.info("未找到历史会话，创建新会话")
 
     async def general_generate():
         # 使用包含工具信息的系统消息
         system_message = SYSTEM_PROMPT.format(history=str(history_messages))
-        async for chunk in simple_agent.astream([SystemMessage(content=system_message), HumanMessage(content=simple_task.query)]):
-            # chunk 已经是 dict: {"event": "task_result", "data": {"message": "..."}}
-            # 需要 JSON 序列化后作为 SSE 的 data 字段
-            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        logger.info(f"=== 开始生成响应 ===")
+        logger.info(f"用户输入内容: {simple_task.query}")
+        logger.info(f"历史上下文数量: {len(history_messages)}")
+        logger.info(f"系统提示词: {system_message[:200]}...")  # 只打印前200字符避免日志过长
 
+        try:
+            async for chunk in simple_agent.astream([SystemMessage(content=system_message), HumanMessage(content=simple_task.query)]):
+                logger.debug(f"收到chunk: {chunk}")
+                # chunk 已经是 dict: {"event": "task_result", "data": {"message": "..."}}
+                # 需要 JSON 序列化后作为 SSE 的 data 字段
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            logger.info("=== 响应生成完成 ===")
+        except Exception as e:
+            logger.error(f"生成响应时出错: {e}")
+            error_chunk = {
+                "event": "error",
+                "data": {
+                    "message": "抱歉，处理您的请求时出现了错误。请稍后重试。"
+                }
+            }
+            yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+
+    logger.info("=== WORKSPACE API 入口处理完成，返回StreamingResponse ===")
     return StreamingResponse(
         general_generate(),
         media_type="text/event-stream",
