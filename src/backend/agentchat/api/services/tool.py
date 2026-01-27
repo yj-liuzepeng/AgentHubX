@@ -25,9 +25,23 @@ class ToolService:
 
     @classmethod
     async def verify_user_permission(cls, tool_id, user_id):
-        if user_id == AdminUser or user_id == await cls._get_user_by_tool_id(tool_id):
+        logger.info(
+            f"权限验证 - tool_id: {tool_id}, user_id: {user_id}, AdminUser: {AdminUser}")
+        logger.info(
+            f"user_id类型: {type(user_id)}, AdminUser类型: {type(AdminUser)}")
+
+        # 获取工具的所有者ID
+        tool_user_id = await cls._get_user_by_tool_id(tool_id)
+        logger.info(f"工具所有者ID: {tool_user_id}, 类型: {type(tool_user_id)}")
+
+        # 检查是否是管理员或工具所有者
+        if str(user_id) == str(AdminUser) or str(user_id) == str(tool_user_id):
+            logger.info("权限验证通过")
             pass
         else:
+            logger.error(f"权限验证失败 - 当前用户: {user_id}, 工具所有者: {tool_user_id}")
+            logger.error(
+                f"字符串比较结果 - user_id==AdminUser: {str(user_id) == str(AdminUser)}, user_id==tool_user_id: {str(user_id) == str(tool_user_id)}")
             raise ValueError("没有权限访问")
 
     @classmethod
@@ -82,7 +96,7 @@ class ToolService:
     async def _get_user_by_tool_id(cls, tool_id: str):
         try:
             tool = await ToolDao.get_tool_by_id(tool_id=tool_id)
-            return tool.tool_id
+            return tool.user_id  # 修复：返回user_id而不是tool_id
         except Exception as err:
             raise ValueError(f'Get user by tool Id appear Error: {err}')
 
@@ -101,7 +115,6 @@ class ToolService:
             return tool.tool_id
         except Exception as err:
             raise ValueError(f'Get Id by tool name appear Error: {err}')
-
 
     @classmethod
     async def get_tool_ids_from_name(cls, tool_names: List[str], user_id):

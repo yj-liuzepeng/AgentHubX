@@ -20,6 +20,8 @@ class DialogService:
     async def select_dialog(cls, dialog_id: str):
         try:
             results = await DialogDao.select_dialog(dialog_id)
+            if results is None:
+                return []
             return [res.to_dict() for res in results]
         except Exception as err:
             raise ValueError(f"Select Dialog Appear Error: {err}")
@@ -28,6 +30,8 @@ class DialogService:
     async def get_list_dialog(cls, user_id: str):
         try:
             results = await DialogDao.get_dialog_by_user(user_id=user_id)
+            if results is None:
+                return []
             return [res.to_dict() for res in results]
         except Exception as err:
             raise ValueError(f"Get List Dialog Appear Error: {err}")
@@ -60,4 +64,3 @@ class DialogService:
         dialog = await DialogDao.get_agent_by_dialog_id(dialog_id)
         if user_id not in (AdminUser, dialog.user_id):
             raise ValueError(f"没有权限访问")
-

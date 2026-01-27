@@ -17,7 +17,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- AI输出展示区域 -->
     <div class="mars-output-container" ref="outputContainer">
       <!-- 加载状态 -->
@@ -50,19 +50,12 @@
                   <span class="collapse-icon">{{ segment.isCollapsed ? '&#x25B6;' : '&#x25BC;' }}</span>
                 </div>
                 <div v-show="!segment.isCollapsed" class="thinking-content">
-            <MdPreview 
-                    :editorId="`mars-output-${index}`"
-                    :modelValue="segment.content"
-              :showCodeRowNumber="true"
-            />
-          </div>
-        </div>
+                  <MdPreview :editorId="`mars-output-${index}`" :modelValue="segment.content"
+                    :showCodeRowNumber="true" />
+                </div>
+              </div>
               <div v-else class="answer-segment">
-                <MdPreview
-                  :editorId="`mars-output-${index}`"
-                  :modelValue="segment.content"
-                  :showCodeRowNumber="true"
-                />
+                <MdPreview :editorId="`mars-output-${index}`" :modelValue="segment.content" :showCodeRowNumber="true" />
               </div>
             </div>
             <span v-if="isLoading && showTypingIndicator" class="typing-dots">
@@ -146,12 +139,12 @@ const scrollToBottom = () => {
       }
     }, delay)
   }
-  
+
   // 立即滚动一次
   if (outputContainer.value) {
     outputContainer.value.scrollTop = outputContainer.value.scrollHeight
   }
-  
+
   // 然后在不同的延迟时间再次尝试滚动，确保DOM已更新
   scrollWithDelay(50)
   scrollWithDelay(100)
@@ -216,7 +209,7 @@ const toggleCollapse = (segment: { isCollapsed?: boolean }) => {
 // 发送消息
 const sendMessage = async (userMessage: string) => {
   if (!userMessage.trim() || isLoading.value) return
-  
+
   // 重置状态
   chatSegments.value = []
   hasError.value = false
@@ -253,22 +246,22 @@ const sendMessage = async (userMessage: string) => {
           console.log('=== Mars消息处理开始 ===')
           console.log('原始消息数据长度:', msg.data.length)
           console.log('原始消息数据:', msg.data.substring(0, 200) + (msg.data.length > 200 ? '...' : ''))
-          
+
           // 处理SSE格式的数据，去掉 "data: " 前缀
           let rawData = msg.data.trim()
-          
+
           if (!rawData) return
-          
+
           // 去掉 "data: " 前缀（如果存在）
           if (rawData.startsWith('data: ')) {
             rawData = rawData.substring(6).trim()
           }
-          
+
           console.log('去掉前缀后的数据:', rawData)
-          
+
           let parsedData
           let parseSuccess = false
-          
+
           // 方法1: 尝试直接替换单引号为双引号并解析JSON
           try {
             const jsonString = rawData.replace(/'/g, '"')
@@ -277,7 +270,7 @@ const sendMessage = async (userMessage: string) => {
             parseSuccess = true
           } catch (parseError1) {
             console.error('方法1 JSON解析失败:', parseError1)
-            
+
             // 方法2: 尝试使用eval解析
             try {
               // @ts-ignore
@@ -290,7 +283,7 @@ const sendMessage = async (userMessage: string) => {
               parseSuccess = true
             } catch (evalError) {
               console.error('方法2 Eval解析失败:', evalError)
-              
+
               // 方法3: 尝试修复JSON格式后再解析
               try {
                 // 尝试处理嵌套引号问题
@@ -298,7 +291,7 @@ const sendMessage = async (userMessage: string) => {
                   .replace(/'/g, '"')                   // 替换所有单引号为双引号
                   .replace(/"\s*([^"]*?)\s*":/g, '"$1":') // 修复键名格式
                   .replace(/:\s*"([^"]*?)"/g, ':"$1"')    // 修复值格式
-                
+
                 parsedData = JSON.parse(fixedJson)
                 if (!parsedData.data) {
                   throw new Error('修复JSON后无法获取data字段')
@@ -312,25 +305,54 @@ const sendMessage = async (userMessage: string) => {
           }
 
           if (parseSuccess && parsedData) {
-            const type = parsedData.type || 'answer'
-            const chunkData = parsedData.data || ''
+            // 处理工具调用事件（status字段存在）
+            if (parsedData.status) {
+              const status = parsedData.status
+              const title = parsedData.title || ''
+              const message = parsedData.message || ''
 
-            if (chunkData !== undefined && chunkData !== null) {
-              if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === type) {
-                chatSegments.value[chatSegments.value.length - 1].content += chunkData
-              } else {
-                const newSegment: { type: string, content: string, isCollapsed?: boolean } = { type: type, content: chunkData }
-                if (type === 'reasoning_chunk') {
-                  newSegment.isCollapsed = false;
+              if (status === 'END' && message) {
+                // 工具调用完成，显示结果
+                const toolResult = `**${title}**\n\n${message}`
+                if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === 'tool_result') {
+                  chatSegments.value[chatSegments.value.length - 1].content += '\n\n' + toolResult
+                } else {
+                  chatSegments.value.push({ type: 'tool_result', content: toolResult })
                 }
-                chatSegments.value.push(newSegment)
+                console.log('添加工具结果:', `"${toolResult}"`)
+              } else if (status === 'START' && title) {
+                // 工具调用开始，显示提示
+                const toolStart = `**${title}**\n\n正在执行...`
+                if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === 'tool_result') {
+                  chatSegments.value[chatSegments.value.length - 1].content += '\n\n' + toolStart
+                } else {
+                  chatSegments.value.push({ type: 'tool_result', content: toolStart })
+                }
+                console.log('工具开始执行:', `"${title}"`)
               }
-              console.log('添加内容:', `"${chunkData}"`, '当前总长度:', aiContent.value.length)
+              scrollToBottom()
+            } else {
+              // 处理普通响应（原有的response_chunk等）
+              const type = parsedData.type || 'answer'
+              const chunkData = parsedData.data || ''
+
+              if (chunkData !== undefined && chunkData !== null) {
+                if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === type) {
+                  chatSegments.value[chatSegments.value.length - 1].content += chunkData
+                } else {
+                  const newSegment: { type: string, content: string, isCollapsed?: boolean } = { type: type, content: chunkData }
+                  if (type === 'reasoning_chunk') {
+                    newSegment.isCollapsed = false;
+                  }
+                  chatSegments.value.push(newSegment)
+                }
+                console.log('添加内容:', `"${chunkData}"`, '当前总长度:', aiContent.value.length)
                 scrollToBottom()
-              
-              // 重新启动计时器，以便在下一次数据延迟时显示...
-              if (isLoading.value) {
-                startTypingTimer()
+
+                // 重新启动计时器，以便在下一次数据延迟时显示...
+                if (isLoading.value) {
+                  startTypingTimer()
+                }
               }
             }
           } else {
@@ -396,25 +418,25 @@ watch(isLoading, (newVal) => {
 // 创建DOM变化观察器，监听内容变化并滚动
 const createContentObserver = () => {
   if (!outputContainer.value) return null
-  
+
   const observer = new MutationObserver((_mutations) => {
     console.log('检测到DOM变化，触发滚动')
     scrollToBottom()
   })
-  
+
   observer.observe(outputContainer.value, {
     childList: true,
     subtree: true,
     characterData: true
   })
-  
+
   return observer
 }
 
 // 发送示例请求
 const sendExampleRequest = async (exampleId: number) => {
   if (isLoading.value) return
-  
+
   // 重置状态
   chatSegments.value = []
   hasError.value = false
@@ -451,19 +473,19 @@ const sendExampleRequest = async (exampleId: number) => {
           console.log('=== Mars示例消息处理开始 ===')
           console.log('原始消息数据长度:', msg.data.length)
           console.log('原始消息数据:', msg.data.substring(0, 200) + (msg.data.length > 200 ? '...' : ''))
-          
+
           // 处理SSE格式的数据，去掉 "data: " 前缀
           let rawData = msg.data.trim()
-          
+
           if (!rawData) return
-          
+
           // 去掉 "data: " 前缀（如果存在）
           if (rawData.startsWith('data: ')) {
             rawData = rawData.substring(6).trim()
           }
-          
+
           console.log('去掉前缀后的数据:', rawData)
-          
+
           let parsedData
           let parseSuccess = false
 
@@ -475,7 +497,7 @@ const sendExampleRequest = async (exampleId: number) => {
             parseSuccess = true
           } catch (parseError1) {
             console.error('方法1 JSON解析失败:', parseError1)
-            
+
             // 方法2: 尝试使用eval解析
             try {
               // @ts-ignore
@@ -488,7 +510,7 @@ const sendExampleRequest = async (exampleId: number) => {
               parseSuccess = true
             } catch (evalError) {
               console.error('方法2 Eval解析失败:', evalError)
-              
+
               // 方法3: 尝试修复JSON格式后再解析
               try {
                 // 尝试处理嵌套引号问题
@@ -496,7 +518,7 @@ const sendExampleRequest = async (exampleId: number) => {
                   .replace(/'/g, '"')                   // 替换所有单引号为双引号
                   .replace(/"\s*([^"]*?)\s*":/g, '"$1":') // 修复键名格式
                   .replace(/:\s*"([^"]*?)"/g, ':"$1"')    // 修复值格式
-                
+
                 parsedData = JSON.parse(fixedJson)
                 if (!parsedData.data) {
                   throw new Error('修复JSON后无法获取data字段')
@@ -510,25 +532,54 @@ const sendExampleRequest = async (exampleId: number) => {
           }
 
           if (parseSuccess && parsedData) {
-            const type = parsedData.type || 'answer'
-            const chunkData = parsedData.data || ''
+            // 处理工具调用事件（status字段存在）
+            if (parsedData.status) {
+              const status = parsedData.status
+              const title = parsedData.title || ''
+              const message = parsedData.message || ''
 
-            if (chunkData !== undefined && chunkData !== null) {
-              if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === type) {
-                chatSegments.value[chatSegments.value.length - 1].content += chunkData
-              } else {
-                const newSegment: { type: string, content: string, isCollapsed?: boolean } = { type: type, content: chunkData }
-                if (type === 'reasoning_chunk') {
-                  newSegment.isCollapsed = false;
+              if (status === 'END' && message) {
+                // 工具调用完成，显示结果
+                const toolResult = `**${title}**\n\n${message}`
+                if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === 'tool_result') {
+                  chatSegments.value[chatSegments.value.length - 1].content += '\n\n' + toolResult
+                } else {
+                  chatSegments.value.push({ type: 'tool_result', content: toolResult })
                 }
-                chatSegments.value.push(newSegment)
+                console.log('添加工具结果:', `"${toolResult}"`)
+              } else if (status === 'START' && title) {
+                // 工具调用开始，显示提示
+                const toolStart = `**${title}**\n\n正在执行...`
+                if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === 'tool_result') {
+                  chatSegments.value[chatSegments.value.length - 1].content += '\n\n' + toolStart
+                } else {
+                  chatSegments.value.push({ type: 'tool_result', content: toolStart })
+                }
+                console.log('工具开始执行:', `"${title}"`)
               }
-              console.log('添加内容:', `"${chunkData}"`, '当前总长度:', aiContent.value.length)
+              scrollToBottom()
+            } else {
+              // 处理普通响应（原有的response_chunk等）
+              const type = parsedData.type || 'answer'
+              const chunkData = parsedData.data || ''
+
+              if (chunkData !== undefined && chunkData !== null) {
+                if (chatSegments.value.length > 0 && chatSegments.value[chatSegments.value.length - 1].type === type) {
+                  chatSegments.value[chatSegments.value.length - 1].content += chunkData
+                } else {
+                  const newSegment: { type: string, content: string, isCollapsed?: boolean } = { type: type, content: chunkData }
+                  if (type === 'reasoning_chunk') {
+                    newSegment.isCollapsed = false;
+                  }
+                  chatSegments.value.push(newSegment)
+                }
+                console.log('添加内容:', `"${chunkData}"`, '当前总长度:', aiContent.value.length)
                 scrollToBottom()
-              
-              // 重新启动计时器，以便在下一次数据延迟时显示...
-              if (isLoading.value) {
-                startTypingTimer()
+
+                // 重新启动计时器，以便在下一次数据延迟时显示...
+                if (isLoading.value) {
+                  startTypingTimer()
+                }
               }
             }
           } else {
@@ -599,7 +650,7 @@ onBeforeRouteLeave((_to, _from, next) => {
 onMounted(() => {
   // 创建内容观察器
   createContentObserver()
-  
+
   // 添加浏览器前进后退监听
   const handleBeforeUnload = (event: BeforeUnloadEvent) => {
     if (hasContent.value) {
@@ -608,19 +659,19 @@ onMounted(() => {
       return event.returnValue
     }
   }
-  
+
   window.addEventListener('beforeunload', handleBeforeUnload)
-  
+
   // 检查URL参数
   const messageFromHome = route.query.message
   const exampleId = route.query.example_id
-  
+
   // 清除URL中的参数，保持URL简洁
   router.replace({
     path: route.path,
     query: {}  // 清空所有query参数
   })
-  
+
   // 根据参数类型执行不同的操作
   nextTick(() => {
     // 优先处理示例ID
@@ -629,13 +680,13 @@ onMounted(() => {
       if (!isNaN(id)) {
         sendExampleRequest(id)
       }
-    } 
+    }
     // 如果没有示例ID但有消息，则发送消息
     else if (messageFromHome && typeof messageFromHome === 'string') {
       sendMessage(messageFromHome)
     }
   })
-  
+
   // 清理函数
   onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload)
@@ -674,6 +725,7 @@ onMounted(() => {
     opacity: 0;
     transform: translateY(-30px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -683,7 +735,7 @@ onMounted(() => {
 .leave-modal-header {
   padding: 20px 24px 16px;
   border-bottom: 1px solid #e9ecef;
-  
+
   h3 {
     margin: 0;
     font-size: 18px;
@@ -694,17 +746,17 @@ onMounted(() => {
 
 .leave-modal-body {
   padding: 20px 24px;
-  
+
   p {
     margin: 0 0 12px 0;
     line-height: 1.6;
     color: #555;
-    
+
     &:first-child {
       font-weight: 600;
       color: #4a90e2;
     }
-    
+
     &:last-child {
       margin-bottom: 0;
       font-weight: 500;
@@ -730,22 +782,22 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   min-width: 80px;
-  
+
   &.cancel-btn {
     background: #f8f9fa;
     color: #666;
     border: 1px solid #e9ecef;
-    
+
     &:hover {
       background: #e9ecef;
       color: #333;
     }
   }
-  
+
   &.confirm-btn {
     background: #4a90e2;
     color: white;
-    
+
     &:hover {
       background: #357abd;
       transform: translateY(-2px);
@@ -760,25 +812,31 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden; /* 防止整个页面出现滚动条 */
+  overflow: hidden;
+  /* 防止整个页面出现滚动条 */
 }
 
 .mars-output-container {
   flex: 1;
   width: 100%;
   background: white;
-  overflow-y: auto; /* 只在内容超出时显示垂直滚动条 */
-  overflow-x: hidden; /* 隐藏水平滚动条 */
+  overflow-y: auto;
+  /* 只在内容超出时显示垂直滚动条 */
+  overflow-x: hidden;
+  /* 隐藏水平滚动条 */
   display: flex;
   flex-direction: column;
-  
+
   /* 隐藏右侧滚动条但保留滚动功能 */
   &::-webkit-scrollbar {
     width: 0;
     display: none;
   }
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
+
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
 }
 
 .typing-dots {
@@ -807,9 +865,11 @@ onMounted(() => {
   0% {
     opacity: 0.2;
   }
+
   20% {
     opacity: 1;
   }
+
   100% {
     opacity: 0.2;
   }
@@ -882,12 +942,12 @@ onMounted(() => {
 .mars-content {
   padding: 20px;
   width: 100%;
-  
+
   .mars-chat-message {
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    
+
     .mars-ai-avatar {
       width: 40px;
       height: 40px;
@@ -895,20 +955,20 @@ onMounted(() => {
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      
+
       .avatar-img {
         width: 40px;
         height: 40px;
       }
     }
-    
+
     .mars-response {
       flex: 1;
       line-height: 1.8;
       min-width: 0;
     }
   }
-  
+
   /*
   .mars-generating {
     margin-top: 16px;
@@ -945,12 +1005,12 @@ onMounted(() => {
   justify-content: center;
   padding: 60px 40px;
   text-align: center;
-  
+
   .mars-chat-message {
     display: flex;
     align-items: center;
     gap: 12px;
-    
+
     .mars-ai-avatar {
       width: 40px;
       height: 40px;
@@ -958,13 +1018,13 @@ onMounted(() => {
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      
+
       .avatar-img {
         width: 40px;
         height: 40px;
       }
     }
-    
+
     .mars-error-text {
       font-size: 16px;
       color: #ff4d4f;
@@ -972,7 +1032,7 @@ onMounted(() => {
       font-weight: 500;
     }
   }
-  
+
   .mars-retry-btn {
     background: #722ed1;
     color: white;
@@ -982,7 +1042,7 @@ onMounted(() => {
     font-size: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
-    
+
     &:hover {
       background: #531dab;
       transform: translateY(-2px);
@@ -1000,12 +1060,12 @@ onMounted(() => {
   justify-content: center;
   padding: 60px 40px;
   text-align: center;
-  
+
   .mars-chat-message {
     display: flex;
     align-items: center;
     gap: 12px;
-    
+
     .mars-ai-avatar {
       width: 40px;
       height: 40px;
@@ -1013,20 +1073,20 @@ onMounted(() => {
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      
+
       .avatar-img {
         width: 40px;
         height: 40px;
       }
     }
-    
+
     .mars-empty-text {
       font-size: 16px;
       color: #999;
       margin-bottom: 32px;
     }
   }
-  
+
   .mars-back-btn {
     background: #722ed1;
     color: white;
@@ -1036,7 +1096,7 @@ onMounted(() => {
     font-size: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
-    
+
     &:hover {
       background: #531dab;
       transform: translateY(-2px);
@@ -1048,13 +1108,14 @@ onMounted(() => {
 // 移除滚动条样式，使用上面定义的隐藏滚动条
 
 .mars-response-content {
+
   // Markdown预览组件的样式调整
   :deep(.md-editor-preview) {
     background: transparent;
     padding: 0;
     width: 100%;
     max-width: 100%;
-    
+
     // 确保代码块有合适的样式并充分利用宽度
     pre {
       background: #f6f8fa;
@@ -1066,48 +1127,55 @@ onMounted(() => {
       box-sizing: border-box;
       overflow-x: auto;
     }
-    
+
     // 段落间距
     p {
       margin: 8px 0;
       line-height: 1.6;
       width: 100%;
     }
-    
+
     // 列表样式
-    ul, ol {
+    ul,
+    ol {
       margin: 8px 0;
       padding-left: 24px;
       width: 100%;
     }
-    
+
     // 标题样式
-    h1, h2, h3, h4, h5, h6 {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
       margin: 16px 0 8px 0;
       font-weight: 600;
       width: 100%;
     }
-    
+
     // 表格样式 - 充分利用宽度
     table {
       border-collapse: collapse;
       margin: 8px 0;
       width: 100%;
       max-width: 100%;
-      
-      th, td {
+
+      th,
+      td {
         border: 1px solid #e1e4e8;
         padding: 8px 12px;
         text-align: left;
         word-wrap: break-word;
       }
-      
+
       th {
         background: #f6f8fa;
         font-weight: 600;
       }
     }
-    
+
     // 引用块样式
     blockquote {
       border-left: 4px solid #722ed1;
@@ -1118,7 +1186,7 @@ onMounted(() => {
       width: 100%;
       box-sizing: border-box;
     }
-    
+
     // 行内代码样式
     code {
       background: #f6f8fa;
@@ -1127,9 +1195,11 @@ onMounted(() => {
       font-size: 0.9em;
       color: #d73a49;
     }
-    
+
     // 确保所有内容元素都充分利用宽度
-    div, section, article {
+    div,
+    section,
+    article {
       width: 100%;
       max-width: 100%;
     }
@@ -1139,13 +1209,25 @@ onMounted(() => {
 
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 // 删除输入相关样式，现在只是输出页面
@@ -1154,18 +1236,18 @@ onMounted(() => {
   .mars-output-page {
     padding: 0;
   }
-  
+
   .mars-content {
     padding: 16px;
-    
+
     .mars-chat-message {
       gap: 10px;
-      
+
       .mars-ai-avatar {
         width: 36px;
         height: 36px;
         padding: 5px;
-        
+
         .avatar-img {
           width: 26px;
           height: 26px;
@@ -1173,30 +1255,30 @@ onMounted(() => {
       }
     }
   }
-  
+
   .mars-error-state,
   .mars-empty-state {
     padding: 40px 20px;
-    
-         .mars-chat-message {
-       .mars-ai-avatar {
-         width: 36px;
-         height: 36px;
-         
-         .avatar-img {
-           width: 36px;
-           height: 36px;
-         }
-       }
-     }
+
+    .mars-chat-message {
+      .mars-ai-avatar {
+        width: 36px;
+        height: 36px;
+
+        .avatar-img {
+          width: 36px;
+          height: 36px;
+        }
+      }
+    }
   }
-  
-    .mars-content {
+
+  .mars-content {
     .mars-chat-message {
       .mars-loading-dialog {
         padding: 12px 16px;
         min-width: 100px;
-        
+
         .mars-loading-spinner {
           width: 16px;
           height: 16px;
@@ -1204,7 +1286,7 @@ onMounted(() => {
         }
       }
     }
-    
+
     /*
     .mars-generating {
       padding: 10px 12px;
@@ -1219,4 +1301,4 @@ onMounted(() => {
     */
   }
 }
-</style> 
+</style>
