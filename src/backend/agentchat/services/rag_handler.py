@@ -7,6 +7,22 @@ from agentchat.services.rag.vector_db import milvus_client
 from agentchat.services.rag.rerank import Reranker
 from agentchat.settings import app_settings
 
+# 安全日志函数，避免logger未定义问题
+def safe_log(level, message):
+    try:
+        import loguru
+        safe_logger = loguru.logger
+        if level == 'info':
+            safe_logger.info(message)
+        elif level == 'error':
+            safe_logger.error(message)
+        elif level == 'warning':
+            safe_logger.warning(message)
+        elif level == 'debug':
+            safe_logger.debug(message)
+    except:
+        print(f"[{level.upper()}] {message}")
+
 class RagHandler:
 
     @classmethod
@@ -86,7 +102,7 @@ class RagHandler:
             final_result = "\n".join(result.content for result in filtered_results)
             return final_result
         else:
-            logger.info(f"Recall for summary Field numbers < top k, Start recall use content Field")
+            safe_log('info', f"Recall for summary Field numbers < top k, Start recall use content Field")
             return await cls.retrieve_ranked_documents(query, knowledges_id, knowledges_id)
 
 

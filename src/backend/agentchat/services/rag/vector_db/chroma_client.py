@@ -6,6 +6,22 @@ from typing import Dict, Optional, List
 import chromadb
 import asyncio
 
+# 安全日志函数，避免logger未定义问题
+def safe_log(level, message):
+    try:
+        import loguru
+        safe_logger = loguru.logger
+        if level == 'info':
+            safe_logger.info(message)
+        elif level == 'error':
+            safe_logger.error(message)
+        elif level == 'warning':
+            safe_logger.warning(message)
+        elif level == 'debug':
+            safe_logger.debug(message)
+    except:
+        print(f"[{level.upper()}] {message}")
+
 """
 修复后的向量库Chroma客户端
 """
@@ -23,9 +39,9 @@ class ChromaClient:
         try:
             # 使用持久化客户端，避免内存丢失
             self.client = chromadb.PersistentClient(path="./vector_db")
-            logger.info("Successfully connected to Chroma")
+            safe_log('info', "Successfully connected to Chroma")
         except Exception as e:
-            logger.error(f"Failed to connect to Chroma: {e}")
+            safe_log('error', f"Failed to connect to Chroma: {e}")
             raise
 
     def _get_collection_safe(self, collection_name: str) -> Optional[chromadb.Collection]:
@@ -35,13 +51,13 @@ class ChromaClient:
                 try:
                     collection = self.client.get_collection(collection_name)
                     self.collections[collection_name] = collection
-                    logger.debug(f"Collection '{collection_name}' retrieved and added to cache")
+                    safe_log('debug', f"Collection '{collection_name}' retrieved and added to cache")
                 except Exception as e:
-                    logger.debug(f"Collection '{collection_name}' does not exist: {e}")
+                    safe_log('debug', f"Collection '{collection_name}' does not exist: {e}")
                     return None
             return self.collections[collection_name]
         except Exception as e:
-            logger.error(f"Error getting collection '{collection_name}': {e}")
+            safe_log('error', f"Error getting collection '{collection_name}': {e}")
             return None
 
     def _collection_exists(self, collection_name: str) -> bool:
@@ -57,7 +73,7 @@ class ChromaClient:
         if self._collection_exists(collection_name):
             collection = self.client.get_collection(collection_name)
             self.collections[collection_name] = collection
-            logger.info(f"Collection '{collection_name}' already exists")
+            safe_log('info', f"Collection '{collection_name}' already exists")
             return
 
         try:
@@ -66,23 +82,23 @@ class ChromaClient:
                 metadata={"hnsw:space": "cosine"}  # 使用cosine相似度
             )
             self.collections[collection_name] = collection
-            logger.info(f"Successfully created collection: {collection_name}")
+            safe_log('info', f"Successfully created collection: {collection_name}")
         except Exception as e:
-            logger.error(f"Failed to create collection '{collection_name}': {e}")
+            safe_log('error', f"Failed to create collection '{collection_name}': {e}")
             raise
 
     async def search(self, query: str, collection_name: str, top_k: int = 10) -> List[SearchModel]:
         """在指定集合中搜索相似数据"""
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            logger.error(f"Cannot search in collection '{collection_name}' - collection not available")
+            safe_log('error', f"Cannot search in collection '{collection_name}' - collection not available")
             return []
 
         try:
             # 获取查询向量
             query_embeddings = await get_embedding([query])  # 确保传入列表
             if not query_embeddings or len(query_embeddings) == 0:
-                logger.error("Failed to generate query embedding")
+                safe_log('error', "Failed to generate query embedding")
                 return []
 
             query_embedding = query_embeddings[0]
@@ -94,7 +110,7 @@ class ChromaClient:
             )
 
             if not results['ids'] or len(results['ids']) == 0 or len(results['ids'][0]) == 0:
-                logger.info(f"No results found in collection '{collection_name}'")
+                safe_log('info', f"No results found in collection '{collection_name}'")
                 return []
 
             documents = []
@@ -118,20 +134,20 @@ class ChromaClient:
                 )
             return documents[:top_k]  # 确保返回正确数量
         except Exception as e:
-            logger.error(f"Search failed in collection '{collection_name}': {e}")
+            safe_log('error', f"Search failed in collection '{collection_name}': {e}")
             return []
 
     async def search_summary(self, query: str, collection_name: str, top_k: int = 10) -> List[SearchModel]:
         """在指定集合中搜索相似数据（基于摘要）"""
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            logger.error(f"Cannot search in collection '{collection_name}' - collection not available")
+            safe_log('error', f"Cannot search in collection '{collection_name}' - collection not available")
             return []
 
         try:
             query_embeddings = await get_embedding([query])
             if not query_embeddings or len(query_embeddings) == 0:
-                logger.error("Failed to generate query embedding")
+                safe_log('error', "Failed to generate query embedding")
                 return []
 
             query_embedding = query_embeddings[0]
@@ -144,7 +160,7 @@ class ChromaClient:
             )
 
             if not results['ids'] or len(results['ids']) == 0 or len(results['ids'][0]) == 0:
-                logger.info(f"No summary results found in collection '{collection_name}'")
+                safe_log('info', f"No summary results found in collection '{collection_name}'")
                 return []
 
             documents = []
@@ -164,35 +180,35 @@ class ChromaClient:
                 )
             return documents[:top_k]
         except Exception as e:
-            logger.error(f"Summary search failed in collection '{collection_name}': {e}")
+            safe_log('error', f"Summary search failed in collection '{collection_name}': {e}")
             return []
 
     async def delete_by_file_id(self, file_id: str, collection_name: str) -> bool:
         """根据文件ID删除数据"""
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            logger.error(f"Cannot delete from collection '{collection_name}' - collection not available")
+            safe_log('error', f"Cannot delete from collection '{collection_name}' - collection not available")
             return False
 
         try:
             # 先查询要删除的条目
             results = collection.get(where={"file_id": file_id})
             if not results['ids'] or len(results['ids']) == 0:
-                logger.info(f"No documents found for file_id: {file_id}")
+                safe_log('info', f"No documents found for file_id: {file_id}")
                 return True
 
             # 删除找到的条目
             collection.delete(where={"file_id": file_id})
-            logger.info(f"Successfully deleted {len(results['ids'])} documents for file_id: {file_id}")
+            safe_log('info', f"Successfully deleted {len(results['ids'])} documents for file_id: {file_id}")
             return True
         except Exception as e:
-            logger.error(f"Error deleting file_id {file_id} from collection {collection_name}: {e}")
+            safe_log('error', f"Error deleting file_id {file_id} from collection {collection_name}: {e}")
             return False
 
     async def insert(self, collection_name: str, chunks) -> bool:
         """插入数据到指定集合"""
         if not chunks:
-            logger.warning("No chunks to insert")
+            safe_log('warning', "No chunks to insert")
             return True
 
         # 确保集合存在
@@ -201,7 +217,7 @@ class ChromaClient:
 
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            logger.error(f"Cannot insert into collection '{collection_name}' - collection not available")
+            safe_log('error', f"Cannot insert into collection '{collection_name}' - collection not available")
             return False
 
         try:
@@ -242,15 +258,15 @@ class ChromaClient:
                     summary_texts.append("")
 
             if not documents:
-                logger.warning("No valid documents to insert")
+                safe_log('warning', "No valid documents to insert")
                 return True
 
             # 生成嵌入向量
-            logger.info(f"Generating embeddings for {len(documents)} documents...")
+            safe_log('info', f"Generating embeddings for {len(documents)} documents...")
             all_embeddings = await get_embedding(documents)
 
             if not all_embeddings or len(all_embeddings) != len(documents):
-                logger.error(
+                safe_log('error',
                     f"Embedding generation failed. Expected {len(documents)}, got {len(all_embeddings) if all_embeddings else 0}")
                 return False
 
@@ -269,12 +285,12 @@ class ChromaClient:
                     metadatas=batch_metadatas
                 )
 
-                logger.debug(f"Inserted batch {i // batch_size + 1}: {len(batch_ids)} items")
+                safe_log('debug', f"Inserted batch {i // batch_size + 1}: {len(batch_ids)} items")
 
-            logger.info(f"Successfully inserted {len(chunks)} chunks into collection '{collection_name}'")
+            safe_log('info', f"Successfully inserted {len(chunks)} chunks into collection '{collection_name}'")
             return True
         except Exception as e:
-            logger.error(f"Failed to insert data into collection '{collection_name}': {e}")
+            safe_log('error', f"Failed to insert data into collection '{collection_name}': {e}")
             return False
 
     async def delete_collection(self, collection_name: str) -> bool:
@@ -283,13 +299,13 @@ class ChromaClient:
             if self._collection_exists(collection_name):
                 self.client.delete_collection(collection_name)
                 self.collections.pop(collection_name, None)
-                logger.info(f"Collection '{collection_name}' deleted successfully")
+                safe_log('info', f"Collection '{collection_name}' deleted successfully")
                 return True
             else:
-                logger.warning(f"Collection '{collection_name}' does not exist")
+                safe_log('warning', f"Collection '{collection_name}' does not exist")
                 return False
         except Exception as e:
-            logger.error(f"Failed to delete collection '{collection_name}': {e}")
+            safe_log('error', f"Failed to delete collection '{collection_name}': {e}")
             return False
 
     def unload_collection(self, collection_name: str) -> bool:
@@ -297,13 +313,13 @@ class ChromaClient:
         try:
             if collection_name in self.collections:
                 self.collections.pop(collection_name)
-                logger.info(f"Collection '{collection_name}' unloaded successfully")
+                safe_log('info', f"Collection '{collection_name}' unloaded successfully")
                 return True
             else:
-                logger.warning(f"Collection '{collection_name}' not found in cache")
+                safe_log('warning', f"Collection '{collection_name}' not found in cache")
                 return False
         except Exception as e:
-            logger.error(f"Failed to unload collection '{collection_name}': {e}")
+            safe_log('error', f"Failed to unload collection '{collection_name}': {e}")
             return False
 
     def get_loaded_collections(self) -> List[str]:
@@ -316,7 +332,7 @@ class ChromaClient:
             collections = self.client.list_collections()
             return [col.name for col in collections]
         except Exception as e:
-            logger.error(f"Failed to get collection list: {e}")
+            safe_log('error', f"Failed to get collection list: {e}")
             return []
 
     def get_collection_count(self, collection_name: str) -> int:
@@ -328,7 +344,7 @@ class ChromaClient:
             result = collection.count()
             return result
         except Exception as e:
-            logger.error(f"Failed to get count for collection '{collection_name}': {e}")
+            safe_log('error', f"Failed to get count for collection '{collection_name}': {e}")
             return 0
 
     def close(self):
@@ -336,9 +352,9 @@ class ChromaClient:
         try:
             self.collections.clear()
             self.client = None
-            logger.info("Chroma connection closed and all collections unloaded")
+            safe_log('info', "Chroma connection closed and all collections unloaded")
         except Exception as e:
-            logger.error(f"Error closing Chroma connection: {e}")
+            safe_log('error', f"Error closing Chroma connection: {e}")
 
     def __enter__(self):
         return self
