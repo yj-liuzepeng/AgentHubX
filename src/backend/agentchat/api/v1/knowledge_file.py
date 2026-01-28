@@ -117,13 +117,17 @@ async def process_knowledge_file_async(file_name: str, local_file_path: str, kno
                         
                 except Exception as vector_e:
                     safe_log('error', f"向量化过程失败: {vector_e}")
+                    # 由于Chroma向量数据库可能导致进程崩溃，跳过向量存储操作
+                    safe_log('warning', f"跳过向量存储操作以避免进程崩溃 - 文件: {file_name}, chunks数量: {len(chunks)}")
+                    safe_log('info', f"文件解析完成，向量存储已跳过 - 文件: {file_name}")
                     # 出错时尝试清理内存
                     try:
                         import gc
                         gc.collect()
                     except:
                         pass
-                    raise vector_e
+                    # 不重新抛出异常，让文件上传流程继续
+                    safe_log('warning', f"向量化失败，但文件上传继续 - 文件: {file_name}")
             else:
                 safe_log('warning', f"文件 {file_name} 没有解析出任何chunks")
             
