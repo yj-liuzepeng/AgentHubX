@@ -127,9 +127,8 @@ async def update_mcp_server_into_mysql(has_mcp_server: bool):
                 return server
         return None
 
-
-
     # 解析Params中的工具列表
+
     async def get_tools_name_from_params(tools_params: dict):
         tools_name = []
         for tool in tools_params:

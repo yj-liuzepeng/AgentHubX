@@ -6,6 +6,8 @@ from pymilvus import connections, Collection, utility, FieldSchema, DataType, Co
 from typing import Dict, Optional, List
 
 # 安全日志函数，避免logger未定义问题
+
+
 def safe_log(level, message):
     try:
         import loguru
@@ -36,19 +38,23 @@ class MilvusClient:
         """建立 Milvus 连接，带有重试机制"""
         max_retries = 3
         retry_delay = 2  # 秒
-        
+
         for attempt in range(max_retries):
             try:
-                connections.connect("default", host=self.milvus_host, port=self.milvus_port)
-                safe_log('info', f"Successfully connected to Milvus at {self.milvus_host}:{self.milvus_port}")
+                connections.connect(
+                    "default", host=self.milvus_host, port=self.milvus_port)
+                safe_log(
+                    'info', f"Successfully connected to Milvus at {self.milvus_host}:{self.milvus_port}")
                 return
             except Exception as e:
-                safe_log('warning', f"Attempt {attempt + 1} to connect to Milvus failed: {e}")
+                safe_log(
+                    'warning', f"Attempt {attempt + 1} to connect to Milvus failed: {e}")
                 if attempt < max_retries - 1:
                     import time
                     time.sleep(retry_delay * (attempt + 1))
                 else:
-                    safe_log('error', f"Failed to connect to Milvus after {max_retries} attempts: {e}")
+                    safe_log(
+                        'error', f"Failed to connect to Milvus after {max_retries} attempts: {e}")
                     raise
 
     def _initialize_collections(self):
@@ -67,43 +73,61 @@ class MilvusClient:
             # 尝试加载集合
             collection.load()
             self.loaded_collections.add(collection_name)
-            safe_log('info', f"Collection '{collection_name}' loaded successfully")
+            safe_log(
+                'info', f"Collection '{collection_name}' loaded successfully")
             return True
         except Exception as e:
             # 如果加载失败，可能是因为集合已经加载或其他原因
             try:
                 # 尝试通过简单查询来验证集合是否可用
                 self.loaded_collections.add(collection_name)
-                safe_log('info', f"Collection '{collection_name}' is already loaded")
+                safe_log(
+                    'info', f"Collection '{collection_name}' is already loaded")
                 return True
             except Exception as inner_e:
-                safe_log('error', f"Failed to load collection '{collection_name}': {e}, verification failed: {inner_e}")
+                safe_log(
+                    'error', f"Failed to load collection '{collection_name}': {e}, verification failed: {inner_e}")
                 return False
 
     def _get_collection_safe(self, collection_name: str) -> Optional[Collection]:
         """安全地获取集合，按需加载（懒加载）"""
+        safe_log(
+            'debug', f"[COLLECTION_ACCESS] Attempting to access collection: '{collection_name}'")
+
         try:
             # 如果集合不在缓存中，先检查是否存在
             if collection_name not in self.collections:
+                safe_log(
+                    'debug', f"[COLLECTION_ACCESS] Collection '{collection_name}' not in cache, checking existence")
                 if not self._collection_exists(collection_name):
-                    safe_log('error', f"Collection '{collection_name}' does not exist")
+                    safe_log(
+                        'error', f"Collection '{collection_name}' does not exist")
                     return None
 
                 # 创建集合对象但不立即加载
                 collection = Collection(collection_name)
                 self.collections[collection_name] = collection
-                safe_log('debug', f"Collection '{collection_name}' added to cache")
+                safe_log(
+                    'debug', f"Collection '{collection_name}' added to cache")
 
             collection = self.collections[collection_name]
 
             # 懒加载：只有在实际使用时才加载到内存
+            safe_log(
+                'debug', f"[COLLECTION_ACCESS] Ensuring collection '{collection_name}' is loaded")
             if not self._ensure_collection_loaded(collection):
-                safe_log('warning', f"Collection '{collection_name}' may not be fully loaded, but will try to proceed")
+                safe_log(
+                    'warning', f"Collection '{collection_name}' may not be fully loaded, but will try to proceed")
 
+            safe_log(
+                'debug', f"[COLLECTION_ACCESS] Successfully accessed collection: '{collection_name}'")
             return collection
 
         except Exception as e:
-            safe_log('error', f"Error getting collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Error getting collection '{collection_name}': {e}")
+            safe_log(
+                'exception', f"Exception details for collection '{collection_name}': {str(e)}")
             return None
 
     def _collection_exists(self, collection_name: str) -> bool:
@@ -118,19 +142,30 @@ class MilvusClient:
 
         try:
             fields = [
-                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=256),
-                FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=2048),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),
-                FieldSchema(name="summary", dtype=DataType.VARCHAR, max_length=1024),
-                FieldSchema(name="embedding_summary", dtype=DataType.FLOAT_VECTOR, dim=1024),
-                FieldSchema(name="file_id", dtype=DataType.VARCHAR, max_length=128),
-                FieldSchema(name="file_name", dtype=DataType.VARCHAR, max_length=256),
-                FieldSchema(name="knowledge_id", dtype=DataType.VARCHAR, max_length=128),
-                FieldSchema(name="update_time", dtype=DataType.VARCHAR, max_length=128),
+                FieldSchema(name="id", dtype=DataType.INT64,
+                            is_primary=True, auto_id=True),
+                FieldSchema(name="chunk_id",
+                            dtype=DataType.VARCHAR, max_length=256),
+                FieldSchema(name="content", dtype=DataType.VARCHAR,
+                            max_length=2048),
+                FieldSchema(name="embedding",
+                            dtype=DataType.FLOAT_VECTOR, dim=1024),
+                FieldSchema(name="summary", dtype=DataType.VARCHAR,
+                            max_length=1024),
+                FieldSchema(name="embedding_summary",
+                            dtype=DataType.FLOAT_VECTOR, dim=1024),
+                FieldSchema(name="file_id", dtype=DataType.VARCHAR,
+                            max_length=128),
+                FieldSchema(name="file_name",
+                            dtype=DataType.VARCHAR, max_length=256),
+                FieldSchema(name="knowledge_id",
+                            dtype=DataType.VARCHAR, max_length=128),
+                FieldSchema(name="update_time",
+                            dtype=DataType.VARCHAR, max_length=128),
             ]
 
-            schema = CollectionSchema(fields, description=f"RAG Collection: {collection_name}")
+            schema = CollectionSchema(
+                fields, description=f"RAG Collection: {collection_name}")
             collection = Collection(collection_name, schema)
 
             # 创建索引
@@ -146,22 +181,32 @@ class MilvusClient:
             collection.load()
 
             self.collections[collection_name] = collection
-            safe_log('info', f'Successfully created and loaded collection: {collection_name}')
+            safe_log(
+                'info', f'Successfully created and loaded collection: {collection_name}')
 
         except Exception as e:
-            safe_log('error', f"Failed to create collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to create collection '{collection_name}': {e}")
             raise
 
     async def search(self, query: str, collection_name: str, top_k: int = 10) -> List[SearchModel]:
         """在指定集合中搜索相似数据"""
+        safe_log(
+            'info', f"[MILVUS_SEARCH_START] Query: '{query}', Collection: '{collection_name}', Top K: {top_k}")
+
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot search in collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot search in collection '{collection_name}' - collection not available")
             return []
 
         try:
             # 生成查询向量
+            safe_log(
+                'debug', f"[MILVUS_SEARCH_PROCESS] Generating embedding for query: '{query}'")
             query_embedding = await get_embedding(query)
+            safe_log(
+                'debug', f"[MILVUS_SEARCH_PROCESS] Generated embedding vector (length: {len(query_embedding)})")
 
             # 定义搜索参数
             search_params = {
@@ -169,18 +214,29 @@ class MilvusClient:
                 "params": {"nprobe": 16}
             }
 
+            safe_log(
+                'debug', f"[MILVUS_SEARCH_PROCESS] Search parameters: {search_params}")
+
             # 执行搜索
+            safe_log(
+                'info', f"[MILVUS_SEARCH_PROCESS] Executing search in collection '{collection_name}'")
             results = collection.search(
                 data=[query_embedding],
                 anns_field="embedding",
                 param=search_params,
                 limit=top_k,
-                output_fields=["content", "chunk_id", "summary", "file_id", "file_name", "knowledge_id", "update_time"]
+                output_fields=["content", "chunk_id", "summary",
+                               "file_id", "file_name", "knowledge_id", "update_time"]
             )
-    
+
+            safe_log(
+                'info', f"[MILVUS_SEARCH_PROCESS] Search completed, got {len(results[0]) if results else 0} results")
+
             # 格式化结果
             documents = []
-            for hit in results[0]:
+            for i, hit in enumerate(results[0]):
+                safe_log(
+                    'debug', f"[MILVUS_SEARCH_PROCESS] Processing result {i}: chunk_id={getattr(hit.entity, 'chunk_id', 'N/A')}, score={hit.distance}")
                 documents.append(
                     SearchModel(
                         content=hit.entity.content,
@@ -194,22 +250,35 @@ class MilvusClient:
                     )
                 )
 
+            safe_log(
+                'info', f"[MILVUS_SEARCH_RESULT] Successfully formatted {len(documents)} documents")
             return documents
 
         except Exception as e:
-            safe_log('error', f"Search failed in collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Search failed in collection '{collection_name}': {e}")
+            safe_log(
+                'exception', f"Exception details for collection '{collection_name}': {str(e)}")
             return []
 
     async def search_summary(self, query: str, collection_name: str, top_k: int = 10) -> List[SearchModel]:
         """在指定集合中搜索相似数据（基于摘要）"""
+        safe_log(
+            'info', f"[MILVUS_SUMMARY_SEARCH_START] Query: '{query}', Collection: '{collection_name}', Top K: {top_k}")
+
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot search in collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot search in collection '{collection_name}' - collection not available")
             return []
 
         try:
             # 生成查询向量
+            safe_log(
+                'debug', f"[MILVUS_SUMMARY_SEARCH_PROCESS] Generating embedding for query: '{query}'")
             query_embedding = await get_embedding(query)
+            safe_log(
+                'debug', f"[MILVUS_SUMMARY_SEARCH_PROCESS] Generated embedding vector (length: {len(query_embedding)})")
 
             # 定义搜索参数
             search_params = {
@@ -217,18 +286,29 @@ class MilvusClient:
                 "params": {"nprobe": 16}
             }
 
+            safe_log(
+                'debug', f"[MILVUS_SUMMARY_SEARCH_PROCESS] Search parameters: {search_params}")
+
             # 执行搜索
+            safe_log(
+                'info', f"[MILVUS_SUMMARY_SEARCH_PROCESS] Executing summary search in collection '{collection_name}'")
             results = collection.search(
                 data=[query_embedding],
                 anns_field="embedding_summary",
                 param=search_params,
                 limit=top_k,
-                output_fields=["content", "chunk_id", "summary", "file_id", "file_name", "knowledge_id", "update_time"]
+                output_fields=["content", "chunk_id", "summary",
+                               "file_id", "file_name", "knowledge_id", "update_time"]
             )
+
+            safe_log(
+                'info', f"[MILVUS_SUMMARY_SEARCH_PROCESS] Summary search completed, got {len(results[0]) if results else 0} results")
 
             # 格式化结果
             documents = []
-            for hit in results[0]:
+            for i, hit in enumerate(results[0]):
+                safe_log(
+                    'debug', f"[MILVUS_SUMMARY_SEARCH_PROCESS] Processing result {i}: chunk_id={getattr(hit.entity, 'chunk_id', 'N/A')}, score={hit.distance}")
                 documents.append(
                     SearchModel(
                         content=hit.entity.get("content", ""),
@@ -242,17 +322,23 @@ class MilvusClient:
                     )
                 )
 
+            safe_log(
+                'info', f"[MILVUS_SUMMARY_SEARCH_RESULT] Successfully formatted {len(documents)} documents")
             return documents
 
         except Exception as e:
-            safe_log('error', f"Summary search failed in collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Summary search failed in collection '{collection_name}': {e}")
+            safe_log(
+                'exception', f"Exception details for collection '{collection_name}': {str(e)}")
             return []
 
     async def delete_by_file_id(self, file_id: str, collection_name: str) -> bool:
         """根据文件ID删除数据"""
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot delete from collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot delete from collection '{collection_name}' - collection not available")
             return False
 
         try:
@@ -268,14 +354,16 @@ class MilvusClient:
                 delete_expr = f"id in {delete_ids}"
                 collection.delete(delete_expr)
                 collection.flush()  # 确保删除操作立即生效
-                safe_log('info', f'Successfully deleted {len(delete_ids)} documents for file_id: {file_id}')
+                safe_log(
+                    'info', f'Successfully deleted {len(delete_ids)} documents for file_id: {file_id}')
                 return True
             else:
                 safe_log('info', f'No documents found for file_id: {file_id}')
                 return True
 
         except Exception as e:
-            safe_log('error', f'Error deleting file_id {file_id} from collection {collection_name}: {e}')
+            safe_log(
+                'error', f'Error deleting file_id {file_id} from collection {collection_name}: {e}')
             return False
 
     async def insert(self, collection_name: str, chunks) -> bool:
@@ -283,14 +371,14 @@ class MilvusClient:
         import gc
         import psutil
         import os
-        
+
         # 使用安全的日志记录，避免logger未定义问题
         try:
             import loguru
             safe_logger = loguru.logger
         except:
             safe_logger = None
-            
+
         def safe_log(level, message):
             try:
                 if safe_logger:
@@ -306,46 +394,53 @@ class MilvusClient:
                     print(f"[{level.upper()}] {message}")
             except:
                 print(f"[{level.upper()}] {message}")
-        
+
         def get_memory_usage():
             try:
                 process = psutil.Process(os.getpid())
                 return process.memory_info().rss / 1024 / 1024  # MB
             except:
                 return 0
-        
-        safe_log('info', f"Starting insert into collection '{collection_name}' with {len(chunks)} chunks")
+
+        safe_log(
+            'info', f"Starting insert into collection '{collection_name}' with {len(chunks)} chunks")
         initial_memory = get_memory_usage()
         safe_log('debug', f"Initial memory usage: {initial_memory:.2f} MB")
-        
+
         if collection_name not in self.collections:
-            safe_log('info', f"Collection '{collection_name}' not found, creating...")
+            safe_log(
+                'info', f"Collection '{collection_name}' not found, creating...")
             await self.create_collection(collection_name)
 
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot insert into collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot insert into collection '{collection_name}' - collection not available")
             return False
 
         try:
             # 更保守的批次大小以避免内存问题
             batch_size = 20  # 从50减少到20
             total_chunks = len(chunks)
-            
-            safe_log('info', f"Processing {total_chunks} chunks in batches of {batch_size}")
-            
+
+            safe_log(
+                'info', f"Processing {total_chunks} chunks in batches of {batch_size}")
+
             for i in range(0, total_chunks, batch_size):
                 batch_chunks = chunks[i:i + batch_size]
                 current_memory = get_memory_usage()
-                safe_log('debug', f"Processing batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size}, Memory: {current_memory:.2f} MB")
-                
+                safe_log(
+                    'debug', f"Processing batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size}, Memory: {current_memory:.2f} MB")
+
                 # 检查内存使用情况，如果内存使用过高则进行清理
                 if current_memory > initial_memory + 500:  # 如果内存增加超过500MB
-                    safe_log('warning', f"High memory usage detected: {current_memory:.2f} MB, forcing garbage collection")
+                    safe_log(
+                        'warning', f"High memory usage detected: {current_memory:.2f} MB, forcing garbage collection")
                     gc.collect()
                     current_memory = get_memory_usage()
-                    safe_log('info', f"Memory after cleanup: {current_memory:.2f} MB")
-                
+                    safe_log(
+                        'info', f"Memory after cleanup: {current_memory:.2f} MB")
+
                 # 准备批次数据
                 content_list, summary_list, chunk_id_list = [], [], []
                 file_id_list, file_name_list, update_time_list, knowledge_id_list = [], [], [], []
@@ -361,19 +456,22 @@ class MilvusClient:
 
                 try:
                     # 生成嵌入向量 - 使用更小的批次
-                    safe_log('info', f"Generating embeddings for batch {i//batch_size + 1} ({len(content_list)} content, {len(summary_list)} summaries)")
-                    
+                    safe_log(
+                        'info', f"Generating embeddings for batch {i//batch_size + 1} ({len(content_list)} content, {len(summary_list)} summaries)")
+
                     # 分别处理内容和摘要，减少内存峰值
-                    safe_log('debug', f"Generating content embeddings for batch {i//batch_size + 1}")
+                    safe_log(
+                        'debug', f"Generating content embeddings for batch {i//batch_size + 1}")
                     embedding_list = await get_embedding(content_list)
-                    
+
                     # 清理内容列表内存
                     content_list = None
                     gc.collect()
-                    
-                    safe_log('debug', f"Generating summary embeddings for batch {i//batch_size + 1}")
+
+                    safe_log(
+                        'debug', f"Generating summary embeddings for batch {i//batch_size + 1}")
                     embedding_summary_list = await get_embedding(summary_list)
-                    
+
                     # 清理摘要列表内存
                     summary_list = None
                     gc.collect()
@@ -381,9 +479,11 @@ class MilvusClient:
                     # 组织数据
                     data = [
                         chunk_id_list,
-                        content_list if content_list else [chunk.content for chunk in batch_chunks],  # 重新获取内容
+                        content_list if content_list else [
+                            chunk.content for chunk in batch_chunks],  # 重新获取内容
                         embedding_list,
-                        summary_list if summary_list else [chunk.summary for chunk in batch_chunks],  # 重新获取摘要
+                        summary_list if summary_list else [
+                            chunk.summary for chunk in batch_chunks],  # 重新获取摘要
                         embedding_summary_list,
                         file_id_list,
                         file_name_list,
@@ -392,38 +492,44 @@ class MilvusClient:
                     ]
 
                     # 插入批次数据
-                    safe_log('info', f"Inserting batch {i//batch_size + 1} into collection ({len(batch_chunks)} chunks)")
+                    safe_log(
+                        'info', f"Inserting batch {i//batch_size + 1} into collection ({len(batch_chunks)} chunks)")
                     collection.insert(data)
-                    safe_log('info', f"Successfully inserted batch {i//batch_size + 1} with {len(batch_chunks)} chunks")
-                    
+                    safe_log(
+                        'info', f"Successfully inserted batch {i//batch_size + 1} with {len(batch_chunks)} chunks")
+
                     # 批次完成后清理内存
                     data = None
                     embedding_list = None
                     embedding_summary_list = None
                     gc.collect()
-                    
+
                 except Exception as batch_e:
-                    safe_log('error', f"Failed to insert batch {i//batch_size + 1}: {batch_e}")
+                    safe_log(
+                        'error', f"Failed to insert batch {i//batch_size + 1}: {batch_e}")
                     raise batch_e
 
             # 所有批次完成后刷新
             safe_log('info', f"Flushing collection '{collection_name}'")
             collection.flush()
-            
+
             final_memory = get_memory_usage()
-            safe_log('info', f"Successfully inserted all {total_chunks} chunks into collection '{collection_name}'")
-            safe_log('info', f"Memory usage change: {initial_memory:.2f} MB → {final_memory:.2f} MB (+{final_memory - initial_memory:.2f} MB)")
-            
+            safe_log(
+                'info', f"Successfully inserted all {total_chunks} chunks into collection '{collection_name}'")
+            safe_log(
+                'info', f"Memory usage change: {initial_memory:.2f} MB → {final_memory:.2f} MB (+{final_memory - initial_memory:.2f} MB)")
+
             # 最终内存清理
             gc.collect()
             return True
 
         except Exception as e:
-            safe_log('error', f"Failed to insert data into collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to insert data into collection '{collection_name}': {e}")
             # 出错时强制内存清理
             gc.collect()
             return False
-        
+
         finally:
             # 确保最终清理
             gc.collect()
@@ -431,18 +537,21 @@ class MilvusClient:
     async def delete_collection(self, collection_name: str) -> bool:
         """删除集合"""
         if collection_name not in self.collections:
-            safe_log('warning', f"Collection '{collection_name}' not found in cache")
+            safe_log(
+                'warning', f"Collection '{collection_name}' not found in cache")
             return False
 
         try:
             # 删除集合
             Collection(collection_name).drop()
             self.collections.pop(collection_name, None)
-            safe_log('info', f"Collection '{collection_name}' deleted successfully")
+            safe_log(
+                'info', f"Collection '{collection_name}' deleted successfully")
             return True
 
         except Exception as e:
-            safe_log('error', f"Failed to delete collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to delete collection '{collection_name}': {e}")
             return False
 
     def unload_collection(self, collection_name: str) -> bool:
@@ -452,13 +561,16 @@ class MilvusClient:
                 collection = self.collections[collection_name]
                 collection.release()
                 self.loaded_collections.discard(collection_name)
-                safe_log('info', f"Collection '{collection_name}' unloaded successfully")
+                safe_log(
+                    'info', f"Collection '{collection_name}' unloaded successfully")
                 return True
             else:
-                safe_log('warning', f"Collection '{collection_name}' not found in cache")
+                safe_log(
+                    'warning', f"Collection '{collection_name}' not found in cache")
                 return False
         except Exception as e:
-            safe_log('error', f"Failed to unload collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to unload collection '{collection_name}': {e}")
             return False
 
     def get_loaded_collections(self) -> List[str]:
@@ -481,7 +593,8 @@ class MilvusClient:
                 self.unload_collection(collection_name)
 
             connections.disconnect("default")
-            safe_log('info', "Milvus connection closed and all collections unloaded")
+            safe_log(
+                'info', "Milvus connection closed and all collections unloaded")
         except Exception as e:
             safe_log('error', f"Error closing Milvus connection: {e}")
 
@@ -490,4 +603,3 @@ class MilvusClient:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-

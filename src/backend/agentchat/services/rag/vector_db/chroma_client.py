@@ -7,6 +7,8 @@ import chromadb
 import asyncio
 
 # 安全日志函数，避免logger未定义问题
+
+
 def safe_log(level, message):
     try:
         import loguru
@@ -21,6 +23,7 @@ def safe_log(level, message):
             safe_logger.debug(message)
     except:
         print(f"[{level.upper()}] {message}")
+
 
 """
 修复后的向量库Chroma客户端
@@ -46,18 +49,30 @@ class ChromaClient:
 
     def _get_collection_safe(self, collection_name: str) -> Optional[chromadb.Collection]:
         """安全地获取集合"""
+        safe_log(
+            'debug', f"[CHROMA_COLLECTION_ACCESS] Attempting to access collection: '{collection_name}'")
+
         try:
             if collection_name not in self.collections:
+                safe_log(
+                    'debug', f"[CHROMA_COLLECTION_ACCESS] Collection '{collection_name}' not in cache")
                 try:
                     collection = self.client.get_collection(collection_name)
                     self.collections[collection_name] = collection
-                    safe_log('debug', f"Collection '{collection_name}' retrieved and added to cache")
+                    safe_log(
+                        'debug', f"Collection '{collection_name}' retrieved and added to cache")
                 except Exception as e:
-                    safe_log('debug', f"Collection '{collection_name}' does not exist: {e}")
+                    safe_log(
+                        'debug', f"Collection '{collection_name}' does not exist: {e}")
                     return None
+
+            safe_log(
+                'debug', f"[CHROMA_COLLECTION_ACCESS] Successfully accessed collection: '{collection_name}'")
             return self.collections[collection_name]
         except Exception as e:
-            safe_log('error', f"Error getting collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Error getting collection '{collection_name}': {e}")
+            safe_log('exception', f"Exception details: {str(e)}")
             return None
 
     def _collection_exists(self, collection_name: str) -> bool:
@@ -82,36 +97,84 @@ class ChromaClient:
                 metadata={"hnsw:space": "cosine"}  # 使用cosine相似度
             )
             self.collections[collection_name] = collection
-            safe_log('info', f"Successfully created collection: {collection_name}")
+            safe_log(
+                'info', f"Successfully created collection: {collection_name}")
         except Exception as e:
-            safe_log('error', f"Failed to create collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to create collection '{collection_name}': {e}")
             raise
 
     async def search(self, query: str, collection_name: str, top_k: int = 10) -> List[SearchModel]:
         """在指定集合中搜索相似数据"""
+        safe_log(
+            'info', f"[CHROMA_SEARCH_START] Query: '{query}', Collection: '{collection_name}', Top K: {top_k}")
+
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot search in collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot search in collection '{collection_name}' - collection not available")
             return []
 
         try:
             # 获取查询向量
-            query_embeddings = await get_embedding([query])  # 确保传入列表
-            if not query_embeddings or len(query_embeddings) == 0:
-                safe_log('error', "Failed to generate query embedding")
+            safe_log(
+                'debug', f"[CHROMA_SEARCH_PROCESS] Generating embedding for query: '{query}'")
+            query_embedding = await get_embedding(query)
+            safe_log(
+                'debug', f"[CHROMA_SEARCH_PROCESS] Generated embedding vector (length: {len(query_embedding)})")
+
+            # 执行相似度搜索
+            safe_log(
+                'info', f"[CHROMA_SEARCH_PROCESS] Executing search in collection '{collection_name}'")
+
+            # Use the correct ChromaDB API - query() method
+            try:
+                results = collection.query(
+                    # Must be a list of embeddings
+                    query_embeddings=[query_embedding],
+                    n_results=min(top_k, 100),  # 限制最大返回数量
+                    include=["metadatas", "documents", "distances"]
+                )
+            except Exception as api_error:
+                safe_log(
+                    'warning', f"[CHROMA_SEARCH_PROCESS] Standard query failed, trying alternative: {api_error}")
+                # Fallback: try get() method if query fails
+                try:
+                    results = collection.get(
+                        where={"content": {"$contains": query}},
+                        limit=top_k
+                    )
+                    # Convert get results to query format
+                    if results and results.get('ids'):
+                        safe_log(
+                            'info', f"[CHROMA_SEARCH_PROCESS] Using fallback get() method, found {len(results['ids'])} results")
+                        # Create mock query results
+                        results = {
+                            'ids': [results['ids']],
+                            'documents': [results.get('documents', [])],
+                            'metadatas': [results.get('metadatas', [])],
+                            # Mock distances
+                            'distances': [[0.0] * len(results['ids'])]
+                        }
+                    else:
+                        safe_log(
+                            'info', f"[CHROMA_SEARCH_PROCESS] Fallback get() method found no results")
+                        return []
+                except Exception as fallback_error:
+                    safe_log(
+                        'error', f"[CHROMA_SEARCH_PROCESS] Both query and fallback methods failed: {fallback_error}")
+                    return []
+
+            safe_log(
+                'debug', f"[CHROMA_SEARCH_PROCESS] Raw results keys: {list(results.keys()) if results else 'None'}")
+
+            if not results or not results.get('ids') or len(results['ids']) == 0 or len(results['ids'][0]) == 0:
+                safe_log(
+                    'info', f"No results found in collection '{collection_name}'")
                 return []
 
-            query_embedding = query_embeddings[0]
-
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=min(top_k, 100),  # 限制最大返回数量
-                include=["metadatas", "documents", "distances"]
-            )
-
-            if not results['ids'] or len(results['ids']) == 0 or len(results['ids'][0]) == 0:
-                safe_log('info', f"No results found in collection '{collection_name}'")
-                return []
+            safe_log(
+                'info', f"[CHROMA_SEARCH_PROCESS] Found {len(results['ids'][0])} results")
 
             documents = []
             for i in range(len(results['ids'][0])):
@@ -120,6 +183,13 @@ class ChromaClient:
                 if metadata.get("is_summary", False):
                     continue
 
+                distance = results['distances'][0][i] if results.get(
+                    'distances') and len(results['distances']) > 0 else 0
+                score = 1.0 - distance  # 转换为相似度分数
+
+                safe_log(
+                    'debug', f"[CHROMA_SEARCH_PROCESS] Processing result {i}: chunk_id={metadata.get('chunk_id', 'N/A')}, score={score}")
+
                 documents.append(
                     SearchModel(
                         content=results['documents'][0][i] or "",
@@ -129,43 +199,98 @@ class ChromaClient:
                         knowledge_id=metadata.get("knowledge_id", ""),
                         update_time=metadata.get("update_time", ""),
                         summary=metadata.get("summary", ""),
-                        score=1.0 - results['distances'][0][i]  # 转换为相似度分数
+                        score=score
                     )
                 )
+
+            safe_log(
+                'info', f"[CHROMA_SEARCH_RESULT] Successfully formatted {len(documents)} documents")
             return documents[:top_k]  # 确保返回正确数量
+
         except Exception as e:
-            safe_log('error', f"Search failed in collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Search failed in collection '{collection_name}': {e}")
+            safe_log('exception', f"Exception details: {str(e)}")
             return []
 
     async def search_summary(self, query: str, collection_name: str, top_k: int = 10) -> List[SearchModel]:
         """在指定集合中搜索相似数据（基于摘要）"""
+        safe_log(
+            'info', f"[CHROMA_SUMMARY_SEARCH_START] Query: '{query}', Collection: '{collection_name}', Top K: {top_k}")
+
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot search in collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot search in collection '{collection_name}' - collection not available")
             return []
 
         try:
-            query_embeddings = await get_embedding([query])
-            if not query_embeddings or len(query_embeddings) == 0:
-                safe_log('error', "Failed to generate query embedding")
+            safe_log(
+                'debug', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Generating embedding for query: '{query}'")
+            query_embedding = await get_embedding(query)
+            safe_log(
+                'debug', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Generated embedding vector (length: {len(query_embedding)})")
+
+            safe_log(
+                'info', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Executing summary search in collection '{collection_name}'")
+
+            # Try different ChromaDB API approaches
+            try:
+                # Use the correct ChromaDB API - query() method
+                results = collection.query(
+                    # Must be a list of embeddings
+                    query_embeddings=[query_embedding],
+                    n_results=min(top_k * 2, 100),  # 查询更多结果以便过滤
+                    include=["metadatas", "documents", "distances"],
+                    where={"is_summary": True}
+                )
+            except Exception as api_error:
+                safe_log('warning', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Standard query failed, trying alternative: {api_error}")
+                # Fallback: try get() method if query fails
+                try:
+                    results = collection.get(
+                        where={"is_summary": True},
+                        limit=top_k * 2
+                    )
+                    # Convert get results to query format
+                    if results and results.get('ids'):
+                        safe_log('info', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Using fallback get() method, found {len(results['ids'])} results")
+                        # Create mock query results
+                        results = {
+                            'ids': [results['ids']],
+                            'documents': [results.get('documents', [])],
+                            'metadatas': [results.get('metadatas', [])],
+                            'distances': [[0.0] * len(results['ids'])]  # Mock distances
+                        }
+                    else:
+                        safe_log('info', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Fallback get() method found no results")
+                        return []
+                except Exception as fallback_error:
+                    safe_log('error', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Both query and fallback methods failed: {fallback_error}")
+                    return []
+
+            safe_log(
+                'debug', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Raw results keys: {list(results.keys()) if results else 'None'}")
+
+            if not results or not results.get('ids') or len(results['ids']) == 0 or len(results['ids'][0]) == 0:
+                safe_log(
+                    'info', f"No summary results found in collection '{collection_name}'")
                 return []
 
-            query_embedding = query_embeddings[0]
-
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=min(top_k * 2, 100),  # 查询更多结果以便过滤
-                include=["metadatas", "documents", "distances"],
-                where={"is_summary": True}
-            )
-
-            if not results['ids'] or len(results['ids']) == 0 or len(results['ids'][0]) == 0:
-                safe_log('info', f"No summary results found in collection '{collection_name}'")
-                return []
+            safe_log(
+                'info', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Found {len(results['ids'][0])} summary results")
 
             documents = []
             for i in range(len(results['ids'][0])):
                 metadata = results['metadatas'][0][i] or {}
+
+                distance = results['distances'][0][i] if results.get(
+                    'distances') and len(results['distances']) > 0 else 0
+                score = 1.0 - distance  # 转换为相似度分数
+
+                safe_log(
+                    'debug', f"[CHROMA_SUMMARY_SEARCH_PROCESS] Processing result {i}: chunk_id={metadata.get('chunk_id', 'N/A')}, score={score}")
+
                 documents.append(
                     SearchModel(
                         content=results['documents'][0][i] or "",
@@ -175,19 +300,26 @@ class ChromaClient:
                         knowledge_id=metadata.get("knowledge_id", ""),
                         update_time=metadata.get("update_time", ""),
                         summary=metadata.get("summary", ""),
-                        score=1.0 - results['distances'][0][i]
+                        score=score
                     )
                 )
+
+            safe_log(
+                'info', f"[CHROMA_SUMMARY_SEARCH_RESULT] Successfully formatted {len(documents)} summary documents")
             return documents[:top_k]
+
         except Exception as e:
-            safe_log('error', f"Summary search failed in collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Summary search failed in collection '{collection_name}': {e}")
+            safe_log('exception', f"Exception details: {str(e)}")
             return []
 
     async def delete_by_file_id(self, file_id: str, collection_name: str) -> bool:
         """根据文件ID删除数据"""
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot delete from collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot delete from collection '{collection_name}' - collection not available")
             return False
 
         try:
@@ -199,10 +331,12 @@ class ChromaClient:
 
             # 删除找到的条目
             collection.delete(where={"file_id": file_id})
-            safe_log('info', f"Successfully deleted {len(results['ids'])} documents for file_id: {file_id}")
+            safe_log(
+                'info', f"Successfully deleted {len(results['ids'])} documents for file_id: {file_id}")
             return True
         except Exception as e:
-            safe_log('error', f"Error deleting file_id {file_id} from collection {collection_name}: {e}")
+            safe_log(
+                'error', f"Error deleting file_id {file_id} from collection {collection_name}: {e}")
             return False
 
     async def insert(self, collection_name: str, chunks) -> bool:
@@ -217,7 +351,8 @@ class ChromaClient:
 
         collection = self._get_collection_safe(collection_name)
         if not collection:
-            safe_log('error', f"Cannot insert into collection '{collection_name}' - collection not available")
+            safe_log(
+                'error', f"Cannot insert into collection '{collection_name}' - collection not available")
             return False
 
         try:
@@ -262,12 +397,13 @@ class ChromaClient:
                 return True
 
             # 生成嵌入向量
-            safe_log('info', f"Generating embeddings for {len(documents)} documents...")
+            safe_log(
+                'info', f"Generating embeddings for {len(documents)} documents...")
             all_embeddings = await get_embedding(documents)
 
             if not all_embeddings or len(all_embeddings) != len(documents):
                 safe_log('error',
-                    f"Embedding generation failed. Expected {len(documents)}, got {len(all_embeddings) if all_embeddings else 0}")
+                         f"Embedding generation failed. Expected {len(documents)}, got {len(all_embeddings) if all_embeddings else 0}")
                 return False
 
             # 分批插入以避免内存问题
@@ -285,12 +421,15 @@ class ChromaClient:
                     metadatas=batch_metadatas
                 )
 
-                safe_log('debug', f"Inserted batch {i // batch_size + 1}: {len(batch_ids)} items")
+                safe_log(
+                    'debug', f"Inserted batch {i // batch_size + 1}: {len(batch_ids)} items")
 
-            safe_log('info', f"Successfully inserted {len(chunks)} chunks into collection '{collection_name}'")
+            safe_log(
+                'info', f"Successfully inserted {len(chunks)} chunks into collection '{collection_name}'")
             return True
         except Exception as e:
-            safe_log('error', f"Failed to insert data into collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to insert data into collection '{collection_name}': {e}")
             return False
 
     async def delete_collection(self, collection_name: str) -> bool:
@@ -299,13 +438,16 @@ class ChromaClient:
             if self._collection_exists(collection_name):
                 self.client.delete_collection(collection_name)
                 self.collections.pop(collection_name, None)
-                safe_log('info', f"Collection '{collection_name}' deleted successfully")
+                safe_log(
+                    'info', f"Collection '{collection_name}' deleted successfully")
                 return True
             else:
-                safe_log('warning', f"Collection '{collection_name}' does not exist")
+                safe_log(
+                    'warning', f"Collection '{collection_name}' does not exist")
                 return False
         except Exception as e:
-            safe_log('error', f"Failed to delete collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to delete collection '{collection_name}': {e}")
             return False
 
     def unload_collection(self, collection_name: str) -> bool:
@@ -313,13 +455,16 @@ class ChromaClient:
         try:
             if collection_name in self.collections:
                 self.collections.pop(collection_name)
-                safe_log('info', f"Collection '{collection_name}' unloaded successfully")
+                safe_log(
+                    'info', f"Collection '{collection_name}' unloaded successfully")
                 return True
             else:
-                safe_log('warning', f"Collection '{collection_name}' not found in cache")
+                safe_log(
+                    'warning', f"Collection '{collection_name}' not found in cache")
                 return False
         except Exception as e:
-            safe_log('error', f"Failed to unload collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to unload collection '{collection_name}': {e}")
             return False
 
     def get_loaded_collections(self) -> List[str]:
@@ -344,7 +489,8 @@ class ChromaClient:
             result = collection.count()
             return result
         except Exception as e:
-            safe_log('error', f"Failed to get count for collection '{collection_name}': {e}")
+            safe_log(
+                'error', f"Failed to get count for collection '{collection_name}': {e}")
             return 0
 
     def close(self):
@@ -352,7 +498,8 @@ class ChromaClient:
         try:
             self.collections.clear()
             self.client = None
-            safe_log('info', "Chroma connection closed and all collections unloaded")
+            safe_log(
+                'info', "Chroma connection closed and all collections unloaded")
         except Exception as e:
             safe_log('error', f"Error closing Chroma connection: {e}")
 

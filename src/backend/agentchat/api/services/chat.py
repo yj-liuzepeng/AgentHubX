@@ -24,6 +24,7 @@ from agentchat.services.rag_handler import RagHandler
 from agentchat.core.agents.mcp_agent import MCPAgent, MCPConfig
 from agentchat.api.services.mcp_server import MCPService
 
+
 class StreamAgentState(AgentState):
     tool_call_count: NotRequired[int]
     model_call_count: NotRequired[int]
@@ -32,6 +33,7 @@ class StreamAgentState(AgentState):
 
 
 MAX_TOOLS_SIZE = 10
+
 
 class AgentConfig(BaseModel):
     mcp_ids: List[str]
@@ -87,7 +89,7 @@ class EmitEventAgentMiddleware(AgentMiddleware):
             "status": "START",
             "title": f"执行可用工具: {request.tool_call["name"]}",
             "message": f"正在调用插件工具 {request.tool_call["name"]}..."
-            })
+        })
         request.state["tool_call_count"] = tool_call_count + 1
         try:
             tool_result = await handler(request)
@@ -95,7 +97,7 @@ class EmitEventAgentMiddleware(AgentMiddleware):
                 "status": "END",
                 "title": f"执行可用工具: {request.tool_call["name"]}",
                 "message": tool_result.content
-                })
+            })
             return tool_result
         except Exception as err:
             writer({
@@ -104,6 +106,7 @@ class EmitEventAgentMiddleware(AgentMiddleware):
                 "message": str(err)
             })
             return ToolMessage(content=str(err), name=request.tool_call["name"], tool_call_id=request.tool_call["id"])
+
 
 class StreamingAgent:
     def __init__(self, agent_config: AgentConfig):
@@ -146,19 +149,19 @@ class StreamingAgent:
         # 仅支持传入response_format为json object的模型
         tool_selector_middleware = LLMToolSelectorMiddleware(
             model=self.tool_invocation_model,
-            max_tools=3 # 限制每次选择最多 3个工具
+            max_tools=3  # 限制每次选择最多 3个工具
         )
 
         emit_event_middleware = EmitEventAgentMiddleware()
 
         return [emit_event_middleware]
 
-
     async def setup_language_model(self):
         # 普通对话模型
         if self.agent_config.llm_id:
             model_config = await LLMService.get_llm_by_id(self.agent_config.llm_id)
-            self.conversation_model = ModelManager.get_user_model(**model_config)
+            self.conversation_model = ModelManager.get_user_model(
+                **model_config)
         else:
             self.conversation_model = ModelManager.get_conversation_model()
 
@@ -169,7 +172,7 @@ class StreamingAgent:
         return create_agent(
             model=self.conversation_model,
             tools=self.tools + self.mcp_agent_as_tools,
-            #tools=[self.search_tool] if len(self.tools + self.mcp_agent_as_tools) >= MAX_TOOLS_SIZE else self.tools + self.mcp_agent_as_tools,
+            # tools=[self.search_tool] if len(self.tools + self.mcp_agent_as_tools) >= MAX_TOOLS_SIZE else self.tools + self.mcp_agent_as_tools,
             middleware=self.middlewares,
             state_schema=StreamAgentState
         )
@@ -204,7 +207,9 @@ class StreamingAgent:
             if not found_tools:
                 content_str = "未找到相关工具。请尝试其他关键词。"
             else:
-                content_str = f"已找到并激活以下工具:\n" + "\n".join([tool.name for tool in found_tools]) + "\n\n现在你可以调用这些工具了。"
+                content_str = f"已找到并激活以下工具:\n" + \
+                    "\n".join([tool.name for tool in found_tools]) + \
+                    "\n\n现在你可以调用这些工具了。"
 
             tool_msg = ToolMessage(
                 content=content_str,
@@ -214,7 +219,6 @@ class StreamingAgent:
 
             return Command(update={"available_tools": found_tools, "messages": [tool_msg]})
         return search_available_tools
-
 
     async def setup_tools(self) -> List[BaseTool]:
         tools = []
@@ -227,7 +231,6 @@ class StreamingAgent:
 
     async def setup_mcp_agent_as_tools(self):
         mcp_agent_as_tools = []
-
 
         def create_mcp_agent_as_tool(mcp_agent, mcp_as_tool_name, description):
             @tool(mcp_as_tool_name, description=description)
@@ -251,7 +254,8 @@ class StreamingAgent:
             mcp_agent = MCPAgent(mcp_config, self.agent_config.user_id)
             await mcp_agent.init_mcp_agent()
 
-            mcp_agent_as_tools.append(create_mcp_agent_as_tool(mcp_agent, mcp_server.get("mcp_as_tool_name"), mcp_server.get("description")))
+            mcp_agent_as_tools.append(create_mcp_agent_as_tool(
+                mcp_agent, mcp_server.get("mcp_as_tool_name"), mcp_server.get("description")))
 
         return mcp_agent_as_tools
 
@@ -267,20 +271,41 @@ class StreamingAgent:
             Returns:
                 str: 返回从知识库检索来的信息
             """
-            knowledge_message = await RagHandler.retrieve_ranked_documents(
-                query, self.agent_config.knowledge_ids
-            )
-            return knowledge_message
+            import loguru
+            logger = loguru.logger
+            
+            logger.info(f"[RETRIEVAL_START] Query: {query}")
+            logger.info(f"[RETRIEVAL_CONFIG] Knowledge IDs: {self.agent_config.knowledge_ids}")
+            
+            try:
+                if not self.agent_config.knowledge_ids:
+                    logger.warning("[RETRIEVAL_WARNING] No knowledge IDs configured")
+                    return "No knowledge base configured for retrieval."
+                
+                logger.info(f"[RETRIEVAL_PROCESS] Calling RagHandler.retrieve_ranked_documents")
+                knowledge_message = await RagHandler.retrieve_ranked_documents(
+                    query, self.agent_config.knowledge_ids
+                )
+                
+                logger.info(f"[RETRIEVAL_RESULT] Retrieved {len(knowledge_message) if knowledge_message else 0} characters of content")
+                logger.debug(f"[RETRIEVAL_CONTENT] Result: {knowledge_message[:200]}...")
+                
+                return knowledge_message
+                
+            except Exception as e:
+                logger.error(f"[RETRIEVAL_ERROR] Failed to retrieve knowledge: {str(e)}")
+                logger.exception(e)
+                return f"Error retrieving knowledge: {str(e)}"
 
         self.tools.append(retrival_knowledge)
-
 
     async def astream(self, messages: List[BaseMessage]) -> AsyncGenerator[Dict[str, Any], None]:
         """流式调用主方法"""
         response_content = ""
         try:
             async for token, metadata in self.react_agent.astream(
-                    input={"messages": copy.deepcopy(messages), "model_call_count": 0, "user_id": self.agent_config.user_id},
+                    input={"messages": copy.deepcopy(
+                        messages), "model_call_count": 0, "user_id": self.agent_config.user_id},
                     config={"callbacks": [usage_metadata_callback]},
                     stream_mode=["messages", "custom"],
             ):
@@ -311,4 +336,3 @@ class StreamingAgent:
 
     def stop_streaming_callback(self):
         self.stop_streaming = True
-
