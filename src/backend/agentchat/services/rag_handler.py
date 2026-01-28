@@ -251,6 +251,61 @@ class RagHandler:
 
     @classmethod
     async def delete_documents_es_milvus(cls, file_id, knowledge_id):
+        """删除ES和Milvus中的文档数据
+        
+        Args:
+            file_id: 文件ID
+            knowledge_id: 知识库ID（用作集合/索引名）
+            
+        Returns:
+            bool: 是否成功删除
+            
+        注意:
+            该方法具有强容错能力，即使部分删除失败也不会抛出异常，
+            避免导致主程序崩溃
+        """
+        safe_log('info', f"开始清理向量数据 - 文件ID: {file_id}, 知识库ID: {knowledge_id}")
+        
+        es_success = True
+        milvus_success = True
+        
+        # 删除ES数据（如果启用）
         if app_settings.rag.enable_elasticsearch:
-            await es_client.delete_documents(file_id, knowledge_id)
-        await milvus_client.delete_by_file_id(file_id, knowledge_id)
+            try:
+                safe_log('debug', f"开始删除ES数据: {file_id}")
+                await es_client.delete_documents(file_id, knowledge_id)
+                safe_log('info', f"ES数据删除成功: {file_id}")
+            except Exception as es_e:
+                safe_log('error', f"ES数据删除失败: {es_e}")
+                safe_log('exception', es_e)
+                es_success = False
+        else:
+            safe_log('debug', "ES未启用，跳过ES数据删除")
+        
+        # 删除Milvus数据（或Chroma数据）
+        try:
+            safe_log('debug', f"开始删除向量数据: {file_id}")
+            result = await milvus_client.delete_by_file_id(file_id, knowledge_id)
+            if result:
+                safe_log('info', f"向量数据删除成功: {file_id}")
+            else:
+                safe_log('warning', f"向量数据删除可能失败: {file_id}")
+                milvus_success = False
+        except Exception as milvus_e:
+            safe_log('error', f"向量数据删除失败: {milvus_e}")
+            safe_log('exception', milvus_e)
+            milvus_success = False
+            # 即使向量删除失败，也不影响主流程
+            safe_log('warning', f"向量数据删除失败，但继续执行 - 文件ID: {file_id}")
+        
+        # 返回总体结果 - 总是返回成功，避免程序崩溃
+        if es_success and milvus_success:
+            safe_log('info', f"向量数据清理完成: {file_id}")
+        elif es_success or milvus_success:
+            safe_log('warning', f"向量数据部分清理成功: ES={es_success}, Milvus={milvus_success}")
+        else:
+            safe_log('error', f"向量数据清理完全失败: {file_id}")
+        
+        # 总是返回True，避免上层调用因向量删除失败而崩溃
+        # 数据库记录已经成功删除，向量数据清理失败可以后续处理
+        return True

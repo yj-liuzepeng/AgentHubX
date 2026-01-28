@@ -84,13 +84,48 @@ class ESClient:
             return documents
 
     async def delete_documents(self, file_id, index_name):
+        """删除ES中的文档数据
+        
+        Args:
+            file_id: 文件ID
+            index_name: 索引名称
+            
+        Returns:
+            bool: 是否成功删除
+            
+        Raises:
+            Exception: 当删除操作失败时
+        """
         try:
+            logger.info(f"开始删除ES数据 - 文件ID: {file_id}, 索引: {index_name}")
+            
+            # 检查索引是否存在
+            if not self.client.indices.exists(index=index_name):
+                logger.warning(f"索引不存在: {index_name}，跳过删除")
+                return True
+            
             # 构造查询条件
             delete_query = json.loads(ESIndex.index_delete.format(file_id=file_id))
-            self.client.delete_by_query(index=index_name, body=delete_query)
-            logger.info(f'Success delete documents in file id: {file_id}')
+            logger.debug(f"删除查询条件: {delete_query}")
+            
+            # 执行删除操作
+            response = self.client.delete_by_query(index=index_name, body=delete_query)
+            
+            # 检查删除结果
+            deleted_count = response.get('deleted', 0)
+            total_count = response.get('total', 0)
+            
+            if deleted_count > 0:
+                logger.info(f'ES数据删除成功 - 文件ID: {file_id}, 删除数量: {deleted_count}')
+            else:
+                logger.info(f'ES中没有找到需要删除的数据 - 文件ID: {file_id}')
+            
+            return True
+            
         except Exception as e:
-            logger.error(f'Delete documents Error: {e}')
+            logger.error(f'ES数据删除失败 - 文件ID: {file_id}: {e}')
+            logger.exception(e)
+            raise Exception(f"ES数据删除失败: {e}")
 
     async def close(self):
         pass

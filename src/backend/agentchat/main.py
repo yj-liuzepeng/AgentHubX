@@ -96,6 +96,26 @@ def create_app():
             content={"detail": exc.message}
         )
 
+    # 添加全局异常处理器，防止未捕获异常导致服务崩溃
+    @app.exception_handler(Exception)
+    def global_exception_handler(request: Request, exc: Exception):
+        import traceback
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"全局异常处理器捕获异常: {exc}")
+        logger.error(f"异常类型: {type(exc)}")
+        logger.error(f"异常堆栈: {traceback.format_exc()}")
+        
+        # 返回友好的错误响应，避免服务崩溃
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "服务器内部错误",
+                "message": "处理请求时发生错误，请稍后重试",
+                "error_type": str(type(exc).__name__)
+            }
+        )
+
     return app
 
 

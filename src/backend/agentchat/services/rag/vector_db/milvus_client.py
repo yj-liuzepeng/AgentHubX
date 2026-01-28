@@ -334,36 +334,57 @@ class MilvusClient:
             return []
 
     async def delete_by_file_id(self, file_id: str, collection_name: str) -> bool:
-        """根据文件ID删除数据"""
+        """根据文件ID删除数据
+        
+        Args:
+            file_id: 文件ID
+            collection_name: 集合名称
+            
+        Returns:
+            bool: 是否成功删除
+        """
+        safe_log('info', f"开始Milvus删除操作 - 文件ID: {file_id}, 集合: {collection_name}")
+        
         collection = self._get_collection_safe(collection_name)
         if not collection:
             safe_log(
-                'error', f"Cannot delete from collection '{collection_name}' - collection not available")
+                'error', f"无法访问集合 '{collection_name}' - 集合不可用")
             return False
 
         try:
             # 构造查询表达式
             query_expr = f'file_id == "{file_id}"'
+            safe_log('debug', f"查询表达式: {query_expr}")
 
             # 查询符合条件的文档
+            safe_log('debug', f"查询符合条件的文档: {query_expr}")
             results = collection.query(query_expr, output_fields=["id"])
             delete_ids = [result['id'] for result in results]
+            
+            safe_log('info', f"找到 {len(delete_ids)} 个文档需要删除")
 
             # 如果找到匹配的文档，执行删除操作
             if delete_ids:
                 delete_expr = f"id in {delete_ids}"
-                collection.delete(delete_expr)
-                collection.flush()  # 确保删除操作立即生效
+                safe_log('debug', f"删除表达式: {delete_expr}")
+                
+                # 执行删除
+                delete_result = collection.delete(delete_expr)
+                safe_log('debug', f"删除操作结果: {delete_result}")
+                
+                # 确保删除操作立即生效
+                collection.flush()
                 safe_log(
-                    'info', f'Successfully deleted {len(delete_ids)} documents for file_id: {file_id}')
+                    'info', f'成功删除 {len(delete_ids)} 个文档 - 文件ID: {file_id}')
                 return True
             else:
-                safe_log('info', f'No documents found for file_id: {file_id}')
+                safe_log('info', f'未找到需要删除的文档 - 文件ID: {file_id}')
                 return True
 
         except Exception as e:
             safe_log(
-                'error', f'Error deleting file_id {file_id} from collection {collection_name}: {e}')
+                'error', f'Milvus删除失败 - 文件ID: {file_id}, 集合: {collection_name}: {e}')
+            safe_log('exception', e)
             return False
 
     async def insert(self, collection_name: str, chunks) -> bool:

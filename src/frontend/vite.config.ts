@@ -13,7 +13,7 @@ export default defineConfig({
     // 设置反向代理，跨域
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:7860",
+        target: "http://localhost:7860",
         changeOrigin: true,
       },
     },

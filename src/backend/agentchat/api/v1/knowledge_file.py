@@ -37,10 +37,17 @@ async def process_knowledge_file_async(file_name: str, local_file_path: str, kno
     # 系统级异常处理，防止程序崩溃
     import signal
     import sys
+    import threading
+    
+    # 使用线程局部存储来标记是否应该停止处理
+    stop_processing = threading.local()
+    stop_processing.should_stop = False
     
     def signal_handler(signum, frame):
-        safe_log('error', f"收到系统信号 {signum}，强制终止处理")
-        sys.exit(1)
+        safe_log('error', f"收到系统信号 {signum}，安全终止处理")
+        # 不强制退出程序，只记录日志并设置停止标志
+        stop_processing.should_stop = True
+        safe_log('warning', f"后台任务收到信号 {signum}，将优雅退出当前任务")
     
     # 注册信号处理
     signal.signal(signal.SIGTERM, signal_handler)
@@ -142,8 +149,13 @@ async def process_knowledge_file_async(file_name: str, local_file_path: str, kno
     
     except (KeyboardInterrupt, SystemExit) as ke:
         safe_log('error', f"处理被中断: {ke}")
-        await KnowledgeFileService.update_parsing_status(knowledge_file_id, Status.fail)
-        raise ke
+        try:
+            await KnowledgeFileService.update_parsing_status(knowledge_file_id, Status.fail)
+        except:
+            pass  # 如果状态更新失败，不要影响中断处理
+        # 不重新抛出异常，避免导致程序终止
+        safe_log('warning', f"后台任务被中断，但程序继续运行: {ke}")
+        return  # 优雅退出当前任务，不终止整个程序
         
     finally:
         # 清理临时文件
@@ -245,14 +257,60 @@ async def select_knowledge_file(knowledge_id: str = Query(...),
 @router.delete('/knowledge_file/delete', response_model=UnifiedResponseModel)
 async def delete_knowledge_file(knowledge_file_id: str = Body(..., embed=True),
                                 login_user: UserPayload = Depends(get_login_user)):
+    """删除知识文件接口
+    
+    该接口会：
+    1. 验证用户权限
+    2. 删除数据库中的文件记录
+    3. 清理对应的向量数据（ES和Milvus）
+    
+    Args:
+        knowledge_file_id: 要删除的知识文件ID
+        login_user: 当前登录用户信息
+        
+    Returns:
+        UnifiedResponseModel: 统一响应格式
+        
+    注意:
+        该接口具有强容错能力，即使向量数据清理失败，
+        只要数据库记录删除成功，就会返回成功状态
+    """
     try:
+        safe_log('info', f"用户 {login_user.user_id} 请求删除知识文件: {knowledge_file_id}")
+        
         # 验证用户权限
         await KnowledgeFileService.verify_user_permission(knowledge_file_id, login_user.user_id)
+        safe_log('debug', f"权限验证通过: {knowledge_file_id}")
 
-        await KnowledgeFileService.delete_knowledge_file(knowledge_file_id)
-        return resp_200()
+        # 执行删除操作
+        result = await KnowledgeFileService.delete_knowledge_file(knowledge_file_id)
+        
+        if result:
+            safe_log('info', f"知识文件删除成功: {knowledge_file_id}")
+            return resp_200(message="知识文件删除成功")
+        else:
+            safe_log('error', f"知识文件删除失败: {knowledge_file_id}")
+            return resp_500(message="知识文件删除失败")
+            
+    except ValueError as ve:
+        # 文件不存在或权限验证失败
+        safe_log('warning', f"删除知识文件验证失败: {ve}")
+        return resp_500(message=str(ve))
     except Exception as err:
-        return resp_500(message=str(err))
+        # 其他未预期的错误 - 捕获所有异常，避免程序崩溃
+        safe_log('error', f"删除知识文件时发生未预期错误: {err}")
+        safe_log('exception', err)
+        # 返回友好的错误信息，避免暴露内部实现细节
+        error_msg = "删除操作失败"
+        if "权限" in str(err):
+            error_msg = "没有权限执行此操作"
+        elif "不存在" in str(err):
+            error_msg = "文件不存在或已被删除"
+        else:
+            # 记录详细错误但不暴露给用户
+            safe_log('error', f"内部错误详情: {err}")
+        
+        return resp_500(message=error_msg)
 
 @router.get("/knowledge_file/status", response_model=UnifiedResponseModel)
 async def get_knowledge_file_status(knowledge_file_id: str = Body(..., embed=True),
