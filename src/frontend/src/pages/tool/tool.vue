@@ -573,11 +573,11 @@ onMounted(() => {
         <div class="dialog-body">
           <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
             <el-form-item label="中文名称" prop="zh_name">
-              <el-input v-model="createForm.zh_name" placeholder="请输入工具的中文名称" maxlength="10" show-word-limit />
+              <el-input v-model="createForm.zh_name" placeholder="请输入工具的中文名称" maxlength="20" show-word-limit />
             </el-form-item>
 
             <el-form-item label="英文名称" prop="en_name">
-              <el-input v-model="createForm.en_name" placeholder="请输入工具的英文名称" maxlength="10" show-word-limit />
+              <el-input v-model="createForm.en_name" placeholder="请输入工具的英文名称" maxlength="20" show-word-limit />
             </el-form-item>
 
             <el-form-item label="工具描述" prop="description">

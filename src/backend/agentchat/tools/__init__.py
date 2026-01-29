@@ -8,6 +8,7 @@ from agentchat.tools.text2image.action import text_to_image
 from agentchat.tools.convert_to_pdf.action import convert_to_pdf
 from agentchat.tools.convert_to_docx.action import convert_to_docx
 from agentchat.tools.image2text.action import image_to_text
+from agentchat.tools.document_translation.action import document_translation
 
 
 AgentTools = [
@@ -19,7 +20,8 @@ AgentTools = [
     text_to_image,
     image_to_text,
     convert_to_pdf,
-    convert_to_docx
+    convert_to_docx,
+    document_translation
 ]
 
 
@@ -35,6 +37,7 @@ AgentToolsWithName = {
     "image_to_text": image_to_text,
     "convert_to_pdf": convert_to_pdf,
     "convert_to_docx": convert_to_docx,
+    "document_translation": document_translation,
 }
 
 WorkSpacePlugins = AgentToolsWithName

@@ -46,5 +46,11 @@
     "zh_name": "文生图",
     "description": "将用户的图片描述生成一张照片",
     "logo_url": "https://agentchat.oss-cn-beijing.aliyuncs.com/icons/tools/text2image.png"
+  },
+  {
+    "en_name": "document_translation",
+    "zh_name": "文档翻译",
+    "description": "支持PDF、DOCX、DOC、TXT、PPT等多种格式文件的多语言翻译，保持原文档格式和排版",
+    "logo_url": "https://agentchat.oss-cn-beijing.aliyuncs.com/icons/tools/translation.png"
   }
 ]
