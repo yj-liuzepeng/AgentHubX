@@ -3,7 +3,7 @@ from datetime import datetime
 
 # 以可读格式获取当前日期
 def get_current_date():
-    return datetime.now().strftime("%B %d, %Y")
+    return datetime.now().strftime("%Y年%m月%d日")
 
 
 query_writer_instructions = """您的目标是生成复杂多样的网络搜索查询。这些查询旨在用于高级自动化网络研究工具，该工具能够分析复杂结果、跟踪链接并综合信息。
@@ -14,7 +14,7 @@ query_writer_instructions = """您的目标是生成复杂多样的网络搜索�
 - 不要生成超过{number_queries}个查询。
 - 查询应该多样化，如果主题广泛，生成多于1个查询。
 - 不要生成多个相似的查询，1个就足够了。
-- 查询应确保收集最新信息。当前日期是{current_date}。
+- 查询应确保收集最新信息。当前日期是{current_date}，请务必基于此日期推断年份（如2026年），避免使用过时年份（如2024年）。
 - 生成的Json格式只Json字符串，不准带```json等标签
 
 格式: 
@@ -26,7 +26,7 @@ query_writer_instructions = """您的目标是生成复杂多样的网络搜索�
 
 {{
     "rationale": "为了准确回答这个比较增长的问题，我们需要有关苹果股票表现和iPhone销售指标的具体数据点。这些查询针对所需的精确财务信息：公司收入趋势、特定产品的销售数量以及同一财政期间的股票价格变动，以便直接比较。",
-    "query": ["苹果2024财年总收入增长", "iPhone 2024财年销售量增长", "苹果2024财年股票价格增长"],
+    "query": ["苹果2026财年总收入增长", "iPhone 2026财年销售量增长", "苹果2026财年股票价格增长"],
 }}
 
 上下文: {research_topic}"""
