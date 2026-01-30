@@ -152,7 +152,11 @@ class WorkSpaceSimpleAgent:
                 logger.error(f"工具执行失败: {request.tool_call['name']} - 错误: {e}")
                 # 返回工具执行失败的友好提示
                 error_content = f"工具 {request.tool_call['name']} 执行失败: {str(e)}"
-                return ToolMessage(content=error_content, name=request.tool_call['name'])
+                return ToolMessage(
+                    content=error_content,
+                    name=request.tool_call["name"],
+                    tool_call_id=request.tool_call.get("id")
+                )
 
         return [handler_call_mcp_tool]
 

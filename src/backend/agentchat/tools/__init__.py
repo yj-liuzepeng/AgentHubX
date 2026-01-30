@@ -1,6 +1,7 @@
 from agentchat.tools.send_email.action import send_email
 from agentchat.tools.web_search.google_search.action import google_search
 from agentchat.tools.web_search.tavily_search.action import tavily_search
+from agentchat.tools.web_search.metaso_search.action import metaso_search
 from agentchat.tools.arxiv.action import get_arxiv
 from agentchat.tools.get_weather.action import get_weather
 from agentchat.tools.delivery.action import get_delivery_info
@@ -14,6 +15,7 @@ from agentchat.tools.document_translation.action import document_translation
 AgentTools = [
     send_email,
     tavily_search,
+    metaso_search,
     get_weather,
     get_arxiv,
     get_delivery_info,
@@ -28,7 +30,8 @@ AgentTools = [
 AgentToolsWithName = {
     "send_email": send_email,
     "tavily_search": tavily_search,
-    "web_search": tavily_search,
+    "web_search": metaso_search,
+    "metaso_search": metaso_search,
     "get_arxiv": get_arxiv,
     "get_weather": get_weather,
     "get_delivery": get_delivery_info,

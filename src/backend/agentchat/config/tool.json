@@ -12,6 +12,12 @@
     "logo_url": "https://agentchat.oss-cn-beijing.aliyuncs.com/icons/tools/web_search.png"
   },
   {
+    "en_name": "metaso_search",
+    "zh_name": "MetaSo搜索",
+    "description": "帮助用户使用MetaSo进行联网搜索",
+    "logo_url": "https://agentchat.oss-cn-beijing.aliyuncs.com/icons/tools/web_search.png"
+  },
+  {
     "en_name": "get_arxiv",
     "zh_name": "论文检索",
     "description": "帮助用户去查找论文",
