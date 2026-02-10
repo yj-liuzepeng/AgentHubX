@@ -33,6 +33,7 @@ class MCPConfig(BaseModel):
     tools: List[str] = []
     server_name: str
     mcp_server_id: str
+    config: Dict[str, Any] = {}
 
 
 class WorkSpaceSimpleAgent:

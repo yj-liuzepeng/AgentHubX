@@ -28,7 +28,8 @@ async def create_mcp_server(server_name: str = Body(..., description="MCP Server
         server_info = {
             "server_name": server_name,
             "type": type,
-            "url": url
+            "url": url,
+            "config": config
         }
         mcp_manager = MCPManager(
             [convert_mcp_config(server_info)]

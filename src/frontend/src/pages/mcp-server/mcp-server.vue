@@ -56,11 +56,11 @@ const validateForm = () => {
     formErrors.value.server_name = '服务器名称长度在 2 到 50 个字符'
   }
   
-  if (!formData.value.url) {
+  if (!formData.value.url && formData.value.type !== 'stdio') {
     formErrors.value.url = '请输入服务器地址'
-  } else {
+  } else if (formData.value.url) {
     const urlPattern = /^https?:\/\/.+/
-    if (!urlPattern.test(formData.value.url)) {
+    if (formData.value.type !== 'stdio' && !urlPattern.test(formData.value.url)) {
       formErrors.value.url = '请输入正确的URL格式'
     }
   }
@@ -490,6 +490,22 @@ const insertExampleConfig = () => {
   jsonEditor.setValue(JSON.stringify(exampleConfig, null, 2))
 }
 
+// 插入Stdio配置模板
+const insertStdioConfig = () => {
+  const stdioConfig = {
+    "command": "/path/to/python",
+    "args": [
+      "-m",
+      "mcp_server"
+    ],
+    "env": {
+      "PYTHONPATH": "/path/to/project",
+      "PYTHONIOENCODING": "utf-8"
+    }
+  }
+  formData.value.config = JSON.stringify(stdioConfig, null, 2)
+}
+
 // 处理图片加载错误
 const handleImageError = (event: Event) => {
   const target = event.target as HTMLImageElement
@@ -800,12 +816,13 @@ const saveUserConfig = async () => {
                       >
                         <option value="sse">SSE (Server-Sent Events)</option>
                         <option value="websocket">WebSocket</option>
+                        <option value="stdio">Stdio (Local Process)</option>
                       </select>
                       <span v-if="formErrors.type" class="error-text">{{ formErrors.type }}</span>
                     </div>
                   </div>
                   
-                  <div class="form-group">
+                  <div class="form-group" v-if="formData.type !== 'stdio'">
                     <label for="url">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 19c-5 0-5-5.5-7-5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -851,7 +868,17 @@ const saveUserConfig = async () => {
                       <circle cx="12" cy="12" r="3" stroke="#409eff" stroke-width="2"/>
                       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="#409eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <span>服务器配置 (可选)</span>
+                    <span>服务器配置 ({{ formData.type === 'stdio' ? '必填' : '可选' }})</span>
+                    <el-button 
+                      v-if="formData.type === 'stdio'" 
+                      type="primary" 
+                      link 
+                      size="small" 
+                      @click="insertStdioConfig"
+                      style="margin-left: auto;"
+                    >
+                      插入Stdio配置模板
+                    </el-button>
                   </div>
                   
                   <div class="form-group">

@@ -5,7 +5,7 @@ from typing import List
 from langchain_core.messages import ToolCall
 from openai.types.chat import ChatCompletionMessageToolCall
 from pydantic import create_model
-from agentchat.schema.mcp import MCPSSEConfig, MCPWebsocketConfig, MCPStreamableHttpConfig
+from agentchat.schema.mcp import MCPSSEConfig, MCPWebsocketConfig, MCPStreamableHttpConfig, MCPStdioConfig
 
 
 def convert_langchain_tool_calls(tool_calls: List[ChatCompletionMessageToolCall]):
@@ -40,7 +40,26 @@ def convert_mcp_config(servers_info: dict | list):
                 )
             else:
                 # Stdio
-                pass
+                config = server_info.get("config") or {}
+                
+                # Handle user pasting the full mcpServers JSON
+                if "mcpServers" in config:
+                    servers = config.get("mcpServers", {})
+                    if isinstance(servers, dict) and servers:
+                        # Use the config of the server with the same name if possible, or just the first one
+                        target_name = server_info.get("server_name")
+                        if target_name and target_name in servers:
+                            config = servers[target_name]
+                        else:
+                            # Fallback to the first available server config
+                            config = next(iter(servers.values()))
+
+                return MCPStdioConfig(
+                    server_name=server_info.get("server_name"),
+                    command=config.get("command"),
+                    args=config.get("args", []),
+                    env=config.get("env")
+                )
 
     if isinstance(servers_info, dict):
         return convert_single_mcp(servers_info)
