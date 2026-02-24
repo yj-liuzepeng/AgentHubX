@@ -17,12 +17,30 @@ class MilvusLiteClient:
         self._connect()
 
     def _connect(self):
-        """建立 Milvus 连接"""
+        """建立 Milvus Lite 连接 (本地文件模式)"""
         try:
-            connections.connect("default", host=self.milvus_host, port=self.milvus_port)
-            logger.info(f"Successfully connected to Milvus at {self.milvus_host}:{self.milvus_port}")
+            import os
+            import platform
+            
+            # 检查操作系统兼容性
+            if platform.system() == "Windows":
+                logger.warning("Milvus Lite 官方暂不支持 Windows 系统，可能会导致连接失败。建议使用 ChromaDB 或 Docker 部署 Milvus。")
+            
+            # 设置本地数据存储路径
+            db_dir = os.path.join(os.getcwd(), "milvus_data")
+            os.makedirs(db_dir, exist_ok=True)
+            db_path = os.path.join(db_dir, "rag_vector.db")
+            
+            logger.info(f"Attempting to connect to Milvus Lite at: {db_path}")
+            
+            # 使用本地文件 URI 连接 (需要安装 milvus-lite)
+            # 注意：pymilvus 会自动处理 lite 模式，前提是 uri 是文件路径且安装了 milvus-lite
+            connections.connect("default", uri=db_path)
+            
+            logger.info(f"Successfully connected to Milvus Lite at {db_path}")
         except Exception as e:
-            logger.error(f"Failed to connect to Milvus: {e}")
+            logger.error(f"Failed to connect to Milvus Lite: {e}")
+            logger.error("请确保已安装 milvus-lite (pip install milvus-lite>=2.4.0) 且操作系统支持 (Linux/macOS)")
             raise
 
     def _initialize_collections(self):
