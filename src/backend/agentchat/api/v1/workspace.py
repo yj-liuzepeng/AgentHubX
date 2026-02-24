@@ -14,6 +14,7 @@ from agentchat.schema.usage_stats import UsageStatsAgentType
 from agentchat.schema.workspace import WorkSpaceSimpleTask
 from agentchat.api.services.user import UserPayload, get_login_user
 from agentchat.services.workspace.simple_agent import WorkSpaceSimpleAgent, MCPConfig
+from agentchat.services.model_selector import ModelSelector
 from agentchat.utils.contexts import set_user_id_context, set_agent_name_context
 from agentchat.utils.convert import convert_mcp_config
 
@@ -75,6 +76,26 @@ async def workspace_simple_chat(simple_task: WorkSpaceSimpleTask,
     logger.info(f"MCP服务器: {simple_task.mcp_servers}")
     logger.info(f"模型ID: {simple_task.model_id}")
 
+    if simple_task.model_id == "auto":
+        logger.info("=== 启动自动模型选择流程 ===")
+        try:
+            # 获取用户可见的所有模型
+            visible_llms_data = await LLMService.get_visible_llm(login_user.user_id)
+            # 提取 LLM 类型的模型列表
+            available_models = visible_llms_data.get("LLM", [])
+            logger.info(f"获取到用户可见LLM模型数量: {len(available_models)}")
+            
+            # 使用 ModelSelector 选择模型
+            selected_id = ModelSelector.select_model(simple_task.query, available_models)
+            
+            if selected_id:
+                simple_task.model_id = selected_id
+                logger.info(f"=== 自动选择完成，最终使用模型ID: {simple_task.model_id} ===")
+            else:
+                logger.error("自动模式未能选择有效模型，可能没有可用模型")
+        except Exception as e:
+            logger.error(f"自动模型选择过程出错: {e}")
+
     model_config = await LLMService.get_llm_by_id(simple_task.model_id)
     logger.info(f"获取模型配置: {model_config['model']}")
 
@@ -121,7 +142,7 @@ async def workspace_simple_chat(simple_task: WorkSpaceSimpleTask,
 
         try:
             async for chunk in simple_agent.astream([SystemMessage(content=system_message), HumanMessage(content=simple_task.query)]):
-                logger.debug(f"收到chunk: {chunk}")
+                # logger.debug(f"收到chunk: {chunk}")
                 # chunk 已经是 dict: {"event": "task_result", "data": {"message": "..."}}
                 # 需要 JSON 序列化后作为 SSE 的 data 字段
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"

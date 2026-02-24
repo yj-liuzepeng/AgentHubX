@@ -53,6 +53,7 @@ export const deleteWorkspaceSessionAPI = async (sessionId: string) => {
 // 工作区日常对话接口
 export interface WorkSpaceSimpleTask {
   query: string;
+  model_id: string; // 模型ID
   plugins: string[];
   mcp_servers: string[];
   knowledge_ids: string[]; // 知识库ID列表

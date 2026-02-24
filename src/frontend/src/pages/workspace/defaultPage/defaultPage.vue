@@ -72,7 +72,23 @@ const fetchModels = async () => {
         if (Array.isArray(arr)) list.push(...arr)
       })
       // 仅保留 LLM 类型
-      modelOptions.value = list.filter(m => (m.llm_type || '').toUpperCase() === 'LLM')
+      const llmList = list.filter(m => (m.llm_type || '').toUpperCase() === 'LLM')
+      
+      // 添加自动模式选项
+      const autoMode: any = {
+        llm_id: 'auto',
+        model: 'Auto Mode (自动选择)',
+        provider: 'System',
+        llm_type: 'LLM',
+        base_url: '',
+        api_key: '',
+        user_id: 'system',
+        update_time: '',
+        create_time: ''
+      }
+      
+      modelOptions.value = [autoMode, ...llmList]
+      
       // 默认选择第一个
       if (!selectedModelId.value && modelOptions.value.length > 0) {
         selectedModelId.value = modelOptions.value[0].llm_id
