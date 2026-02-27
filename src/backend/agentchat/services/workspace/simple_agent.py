@@ -1,5 +1,6 @@
 import copy
 import asyncio
+import re
 from loguru import logger
 from typing import List, Dict, Any
 from uuid import uuid4
@@ -309,6 +310,7 @@ class WorkSpaceSimpleAgent:
                 messages = [msg for msg in messages if
                             isinstance(msg, ToolMessage) or (isinstance(msg, AIMessage) and msg.tool_calls)]
                 logger.info(f"最终工具消息数量: {len(messages)}")
+                self._log_tool_messages(messages, stage="ReAct")
 
                 # 打印工具调用详情
                 for msg in messages:
@@ -407,6 +409,7 @@ class WorkSpaceSimpleAgent:
             forced_tool_messages = await self._force_rag_tool_messages(user_messages[-1].content)
             messages = forced_tool_messages
             logger.info(f"兜底流程生成工具消息数量: {len(messages)}")
+            self._log_tool_messages(messages, stage="ForceRAG")
 
         messages = user_messages + messages
         if any(isinstance(msg, ToolMessage) for msg in messages):
@@ -440,6 +443,54 @@ class WorkSpaceSimpleAgent:
             ))
         logger.info("会话上下文保存完成")
         logger.info("=== SimpleAgent 流式请求处理完成 ===")
+
+    def _log_tool_messages(self, messages: List[BaseMessage], stage: str):
+        if not messages:
+            return
+
+        preview_chars = 600
+        max_items = 20
+
+        tool_call_count = 0
+        tool_result_count = 0
+
+        for msg in messages[:max_items]:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                for tool_call in msg.tool_calls:
+                    tool_call_count += 1
+                    name = tool_call.get("name")
+                    tool_call_id = tool_call.get("id")
+                    args = tool_call.get("args") or {}
+                    args_keys = list(args.keys()) if isinstance(args, dict) else []
+                    logger.info(f"[{stage}] 工具调用: name={name}, id={tool_call_id}, args_keys={args_keys}")
+            elif isinstance(msg, ToolMessage):
+                tool_result_count += 1
+                content = "" if msg.content is None else str(msg.content)
+                redacted_content = self._redact_sensitive(content)
+                normalized_preview = redacted_content.replace("\r\n", "\n").replace("\n", "\\n")[:preview_chars]
+                ok = not any(k in redacted_content for k in ("执行失败", "Traceback", "Exception", "ERROR", "Error"))
+                logger.info(
+                    f"[{stage}] 工具结果: name={msg.name}, id={msg.tool_call_id}, ok={ok}, len={len(redacted_content)}, preview={normalized_preview}"
+                )
+
+        if len(messages) > max_items:
+            logger.info(f"[{stage}] 工具消息过多，仅展示前 {max_items} 条，剩余 {len(messages) - max_items} 条已省略")
+
+        logger.info(f"[{stage}] 工具调用数: {tool_call_count}, 工具结果数: {tool_result_count}")
+
+    def _redact_sensitive(self, text: str) -> str:
+        if not text:
+            return text
+
+        patterns = [
+            r'("?(?:token|secret|password|api[_-]?key|access[_-]?key|authorization|cookie)"?\s*[:=]\s*)(".*?"|\'.*?\'|[^,\s}]+)',
+            r'((?:Bearer|Basic)\s+)([A-Za-z0-9\-._~+/]+=*)',
+        ]
+
+        redacted = text
+        for pat in patterns:
+            redacted = re.sub(pat, r"\1***", redacted, flags=re.IGNORECASE)
+        return redacted
 
     async def _record_agent_token_usage(self, response: AIMessage | AIMessageChunk | BaseMessage, model):
         if response.usage_metadata:
