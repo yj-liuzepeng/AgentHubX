@@ -2,6 +2,7 @@ import os
 import sys
 import platform
 import subprocess
+import shutil
 from loguru import logger
 
 def convert_to_pdf(input_path):
@@ -63,6 +64,13 @@ def convert_to_pdf(input_path):
 
 def get_libreoffice_command():
     """根据操作系统获取LibreOffice可执行文件路径"""
+    # 优先检查环境变量
+    env_path = os.environ.get("LIBREOFFICE_CMD")
+    if env_path:
+        if os.path.exists(env_path):
+            return env_path
+        logger.warning(f"环境变量 LIBREOFFICE_CMD 指定的路径不存在: {env_path}")
+
     system = platform.system()
     
     if system == "Windows":
@@ -74,7 +82,12 @@ def get_libreoffice_command():
         for path in possible_paths:
             if os.path.exists(path):
                 return path
-        return "soffice"  # 如果在PATH中
+        
+        # Check if in PATH
+        if shutil.which("soffice"):
+            return "soffice"
+            
+        raise FileNotFoundError("未找到LibreOffice。请安装LibreOffice并确保将其添加到PATH，或者设置环境变量 LIBREOFFICE_CMD 指向 soffice.exe")
     
     elif system == "Darwin":  # macOS
         # macOS下可能的LibreOffice安装路径
@@ -84,20 +97,19 @@ def get_libreoffice_command():
         for path in possible_paths:
             if os.path.exists(path):
                 return path
-        return "soffice"  # 如果在PATH中
+        
+        if shutil.which("soffice"):
+            return "soffice"
+            
+        raise FileNotFoundError("未找到LibreOffice。请安装LibreOffice。")
     
     else:  # Linux和其他系统
         # 尝试常见的命令名
         for cmd in ["libreoffice", "soffice"]:
-            try:
-                subprocess.run([cmd, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if shutil.which(cmd):
                 return cmd
-            except FileNotFoundError:
-                continue
         
-        # 如果都找不到
-        logger.warning("未找到LibreOffice，使用默认命令'libreoffice'")
-        return "libreoffice"
+        raise FileNotFoundError("未找到LibreOffice。请安装LibreOffice (libreoffice 或 soffice)。")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
