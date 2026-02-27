@@ -130,3 +130,29 @@ async def update_mcp_server(server_id: str = Body(..., description="MCP Server �
     except Exception as err:
         logger.error(err)
         return resp_500()
+
+
+@router.post("/mcp_server/test_connection")
+async def test_mcp_server_connection(server_id: str = Body(..., description="MCP Server 的ID", embed=True),
+                                     login_user: UserPayload = Depends(get_login_user)):
+    try:
+        # 验证是否有权限
+        await MCPService.verify_user_permission(server_id, login_user.user_id)
+        mcp_server = await MCPService.get_mcp_server_from_id(server_id)
+
+        server_info = {
+            "server_name": mcp_server["server_name"],
+            "type": mcp_server["type"],
+            "url": mcp_server["url"],
+            "config": mcp_server["config"]
+        }
+        
+        mcp_manager = MCPManager([convert_mcp_config(server_info)])
+        # 尝试获取工具列表作为连接测试
+        # get_mcp_tools 不会捕获异常，如果连接失败会抛出错误
+        await mcp_manager.get_mcp_tools()
+        
+        return resp_200(message="连接测试成功")
+    except Exception as err:
+        logger.error(f"Connection test failed: {err}")
+        return resp_500(message=f"连接失败: {str(err)}")

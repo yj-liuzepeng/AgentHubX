@@ -9,6 +9,7 @@ import {
   getMCPServersAPI, 
   deleteMCPServerAPI, 
   updateMCPUserConfigAPI,
+  testMCPServerConnectionAPI,
   type MCPServer, 
   type CreateMCPServerRequest, 
   type MCPServerTool,
@@ -25,6 +26,8 @@ const editingServer = ref<MCPServer | null>(null)
 const configuringServer = ref<MCPServer | null>(null)
 const selectedServerTools = ref<MCPServerTool[]>([])
 const selectedServerName = ref('')
+const testingServerIds = ref<string[]>([])
+const testResultMap = ref<Record<string, { status: 'success' | 'error'; message: string }>>({})
 let jsonEditor: monaco.editor.IStandaloneCodeEditor | null = null
 
 // 配置状态
@@ -267,6 +270,52 @@ const handleDelete = async (server: MCPServer) => {
   } catch (error) {
     console.error('删除MCP服务器失败:', error)
     ElMessage.error('删除失败')
+  }
+}
+
+// 测试连接
+const handleTestConnection = async (server: MCPServer) => {
+  if (testingServerIds.value.includes(server.mcp_server_id)) return
+  testingServerIds.value = [...testingServerIds.value, server.mcp_server_id]
+  
+  try {
+    const response = await testMCPServerConnectionAPI(server.mcp_server_id)
+    const statusCode = Number(response.data?.status_code)
+    const isSuccess = statusCode === 200
+    const message = isSuccess ? '连接测试成功' : (response.data?.status_message || '连接测试失败')
+    
+    testResultMap.value = {
+      ...testResultMap.value,
+      [server.mcp_server_id]: {
+        status: isSuccess ? 'success' : 'error',
+        message
+      }
+    }
+    
+    ElMessage({
+      message,
+      type: isSuccess ? 'success' : 'error',
+      duration: isSuccess ? 3000 : 5000,
+      showClose: true
+    })
+  } catch (error: any) {
+    const message = '连接测试发生异常: ' + (error.message || '未知错误')
+    testResultMap.value = {
+      ...testResultMap.value,
+      [server.mcp_server_id]: {
+        status: 'error',
+        message
+      }
+    }
+    console.error('连接测试失败:', error)
+    ElMessage({
+      message,
+      type: 'error',
+      duration: 5000,
+      showClose: true
+    })
+  } finally {
+    testingServerIds.value = testingServerIds.value.filter(id => id !== server.mcp_server_id)
   }
 }
 
@@ -672,8 +721,29 @@ const saveUserConfig = async () => {
         </el-table-column>
         
         <!-- 编辑列 -->
-        <el-table-column label="编辑" width="150" align="center" fixed="right">
+        <el-table-column label="操作" width="220" align="center" fixed="right">
           <template #default="{ row }">
+            <el-button 
+              size="small" 
+              type="success"
+              :icon="Connection"
+              @click="handleTestConnection(row)"
+              :loading="testingServerIds.includes(row.mcp_server_id)"
+              title="测试连接"
+              round
+              style="margin-right: 5px"
+            >
+              测试
+            </el-button>
+            <el-tag
+              v-if="testResultMap[row.mcp_server_id]"
+              :type="testResultMap[row.mcp_server_id].status === 'success' ? 'success' : 'danger'"
+              size="small"
+              :title="testResultMap[row.mcp_server_id].message"
+              style="margin-right: 6px"
+            >
+              {{ testResultMap[row.mcp_server_id].status === 'success' ? '成功' : '失败' }}
+            </el-tag>
             <el-button 
               v-if="String(row.user_id) !== '0'"
               size="small" 

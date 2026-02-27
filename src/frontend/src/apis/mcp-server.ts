@@ -99,6 +99,15 @@ export interface MCPUserConfig {
   update_time: string
 }
 
+// 测试MCP服务器连接
+export const testMCPServerConnectionAPI = (server_id: string) => {
+  return request<MCPServerSingleResponse>({
+    url: '/api/v1/mcp_server/test_connection',
+    method: 'POST',
+    data: { server_id }
+  })
+}
+
 export interface MCPUserConfigResponse {
   status_code: number
   status_message: string
