@@ -2,12 +2,13 @@ import copy
 import asyncio
 from loguru import logger
 from typing import List, Dict, Any
+from uuid import uuid4
 from pydantic import BaseModel
 from langgraph.types import Command
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langchain.agents import AgentState, create_agent
 from langchain.agents.middleware import wrap_tool_call
-from langchain_core.messages import BaseMessage, AIMessage, ToolMessage, AIMessageChunk
+from langchain_core.messages import BaseMessage, AIMessage, ToolMessage, AIMessageChunk, SystemMessage
 
 from agentchat.core.callbacks import usage_metadata_callback
 from agentchat.tools import WorkSpacePlugins
@@ -61,7 +62,8 @@ class WorkSpaceSimpleAgent:
                  user_id: str,
                  session_id: str,
                  plugins: List[str] = [],
-                 mcp_configs: List[MCPConfig] = []):
+                 mcp_configs: List[MCPConfig] = [],
+                 force_rag: bool = False):
 
         # Simple-agent only needs tool calling model, not conversation model
         self.model = ModelManager.get_user_model(**model_config)
@@ -73,6 +75,7 @@ class WorkSpaceSimpleAgent:
             [mcp_config.model_dump() for mcp_config in mcp_configs]))
         self.plugins = plugins
         self.session_id = session_id
+        self.force_rag = force_rag
 
         self.user_id = user_id
 
@@ -136,8 +139,11 @@ class WorkSpaceSimpleAgent:
                 if self.is_mcp_tool(request.tool_call["name"]):
                     # 针对鉴权的MCP Server需要用户的单独配置，例如飞书、邮箱
                     logger.info(f"检测到MCP工具调用: {request.tool_call['name']}")
-                    mcp_config = await MCPUserConfigService.get_mcp_user_config(self.user_id, self.get_mcp_id_by_tool(request.tool_call["name"]))
-                    request.tool_call["args"].update(mcp_config)
+                    mcp_config = await MCPUserConfigService.get_mcp_user_config(
+                        self.user_id,
+                        self.get_mcp_id_by_tool(request.tool_call["name"])
+                    )
+                    request.tool_call["args"] = self._merge_mcp_args(request.tool_call["args"], mcp_config)
                     logger.info(f"更新MCP工具参数: {request.tool_call['args']}")
                     tool_result = await handler(request)
                     logger.info(f"MCP工具执行成功: {request.tool_call['name']}")
@@ -147,6 +153,9 @@ class WorkSpaceSimpleAgent:
                     logger.info(f"插件工具执行成功: {request.tool_call['name']}")
 
                 logger.info(f"工具返回结果长度: {len(str(tool_result))} 字符")
+                # 打印前100个字符用于调试
+                result_str = str(tool_result)
+                logger.info(f"工具返回结果预览: {result_str[:100]}..." if len(result_str) > 100 else f"工具返回结果: {result_str}")
                 return tool_result
 
             except Exception as e:
@@ -393,7 +402,15 @@ class WorkSpaceSimpleAgent:
             }
             return
 
+        if not messages and self._should_force_rag(user_messages[-1].content):
+            logger.info("未触发工具调用，启用RAG强制检索兜底流程")
+            forced_tool_messages = await self._force_rag_tool_messages(user_messages[-1].content)
+            messages = forced_tool_messages
+            logger.info(f"兜底流程生成工具消息数量: {len(messages)}")
+
         messages = user_messages + messages
+        if any(isinstance(msg, ToolMessage) for msg in messages):
+            messages = [messages[0], SystemMessage(content="请严格依据工具结果回答，若工具结果为空则明确说明未检索到信息。")] + messages[1:]
         logger.info(f"合并用户消息和工具消息，总计: {len(messages)} 条消息")
 
         logger.info("开始生成最终响应...")
@@ -454,3 +471,73 @@ class WorkSpaceSimpleAgent:
                     if server_name == config.server_name:
                         return config.mcp_server_id
         return None
+
+    def _should_force_rag(self, query: str):
+        if not query:
+            return False
+        if self.force_rag:
+            tool_names = [tool.name for tool in self.mcp_tools]
+            return "query_knowledge_hub" in tool_names
+        keywords = ["知识库", "检索", "RAG", "rag", "地址", "网站", "官网", "资料", "信息", "查询", "是什么"]
+        if not any(keyword in query for keyword in keywords):
+            return False
+        tool_names = [tool.name for tool in self.mcp_tools]
+        return "query_knowledge_hub" in tool_names
+
+    async def _force_rag_tool_messages(self, query: str):
+        tool_names = [tool.name for tool in self.mcp_tools]
+        tool_messages: List[BaseMessage] = []
+        tool_calls = []
+
+        if "list_collections" in tool_names:
+            list_call_id = f"manual_{uuid4().hex}"
+            tool_calls.append({
+                "id": list_call_id,
+                "name": "list_collections",
+                "args": {}
+            })
+            list_args = await self._build_mcp_args("list_collections", {})
+            list_result = await self._call_mcp_tool("list_collections", list_args)
+            tool_messages.append(ToolMessage(
+                content=str(list_result),
+                name="list_collections",
+                tool_call_id=list_call_id
+            ))
+
+        if "query_knowledge_hub" in tool_names:
+            query_call_id = f"manual_{uuid4().hex}"
+            query_args = {"query": query, "top_k": 10}
+            tool_calls.append({
+                "id": query_call_id,
+                "name": "query_knowledge_hub",
+                "args": query_args
+            })
+            query_args = await self._build_mcp_args("query_knowledge_hub", query_args)
+            query_result = await self._call_mcp_tool("query_knowledge_hub", query_args)
+            tool_messages.append(ToolMessage(
+                content=str(query_result),
+                name="query_knowledge_hub",
+                tool_call_id=query_call_id
+            ))
+
+        if tool_calls:
+            tool_messages = [AIMessage(content="", tool_calls=tool_calls)] + tool_messages
+        return tool_messages
+
+    async def _build_mcp_args(self, tool_name: str, base_args: Dict[str, Any]):
+        mcp_config = await MCPUserConfigService.get_mcp_user_config(self.user_id, self.get_mcp_id_by_tool(tool_name))
+        if not mcp_config:
+            return base_args
+        return self._merge_mcp_args(base_args, mcp_config)
+
+    def _merge_mcp_args(self, base_args: Dict[str, Any], mcp_config: Dict[str, Any]):
+        if not mcp_config:
+            return base_args
+        sanitized = {k: v for k, v in mcp_config.items() if v not in ("", None, [], {})}
+        return {**base_args, **sanitized}
+
+    async def _call_mcp_tool(self, tool_name: str, tool_args: Dict[str, Any]):
+        results = await self.mcp_manager.call_mcp_tools([{"tool_name": tool_name, "tool_args": tool_args}])
+        if not results:
+            return ""
+        return results[0]

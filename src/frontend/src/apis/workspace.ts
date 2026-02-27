@@ -58,6 +58,7 @@ export interface WorkSpaceSimpleTask {
   mcp_servers: string[];
   knowledge_ids: string[]; // 知识库ID列表
   session_id?: string; // 会话ID，使用uuid4().hex格式
+  force_rag?: boolean;
 }
 
 export const workspaceSimpleChatAPI = async (data: WorkSpaceSimpleTask) => {

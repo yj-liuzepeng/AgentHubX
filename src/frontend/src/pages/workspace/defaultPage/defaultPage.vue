@@ -25,6 +25,7 @@ const showMcpSelector = ref(false)
 const selectedMcpServers = ref<string[]>([])
 const mcpServers = ref<any[]>([])
 const webSearchEnabled = ref(false)
+const forceRagEnabled = ref(false)
 const toolDropdownRef = ref<HTMLElement | null>(null)
 const mcpDropdownRef = ref<HTMLElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -144,6 +145,10 @@ const toggleTool = (toolId: string) => {
 const toggleWebSearch = () => {
   webSearchEnabled.value = !webSearchEnabled.value
   showSearchSelector.value = false
+}
+
+const toggleForceRag = () => {
+  forceRagEnabled.value = !forceRagEnabled.value
 }
 
 // 点击空白处关闭工具/MCP下拉
@@ -276,7 +281,8 @@ const handleSend = async () => {
         model_id: selectedModelId.value,
         plugins: selectedTools.value,
         mcp_servers: selectedMcpServers.value,
-        session_id: currentSessionId.value  // 添加session_id参数
+        session_id: currentSessionId.value,
+        force_rag: forceRagEnabled.value
       }
       console.log('准备调用 workspaceSimpleChatStreamAPI，payload:', payload)
       await workspaceSimpleChatStreamAPI(
@@ -672,6 +678,18 @@ watch(
                     </div>
                   </div>
                 </transition>
+              </div>
+
+              <!-- 知识库检索强制开关（日常模式显示） -->
+              <div v-if="selectedMode === 'normal'" class="selector-dropdown">
+                <div
+                  :class="['selector-item', { active: forceRagEnabled }]"
+                  @click="toggleForceRag"
+                >
+                  <span class="selector-icon">📚</span>
+                  <span class="selector-text">知识库检索</span>
+                  <span v-if="forceRagEnabled" class="selector-check">✓</span>
+                </div>
               </div>
             </div>
             

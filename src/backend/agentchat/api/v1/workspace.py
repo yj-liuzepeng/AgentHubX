@@ -118,7 +118,8 @@ async def workspace_simple_chat(simple_task: WorkSpaceSimpleTask,
         user_id=login_user.user_id,
         session_id=simple_task.session_id,
         plugins=simple_task.plugins,
-        mcp_configs=servers_config
+        mcp_configs=servers_config,
+        force_rag=simple_task.force_rag
     )
     logger.info("SimpleAgent实例创建完成")
 
