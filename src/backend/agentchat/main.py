@@ -6,6 +6,7 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from agentchat.middleware.trace_id_middleware import TraceIDMiddleware
 from agentchat.middleware.white_list_middleware import WhitelistMiddleware
@@ -14,6 +15,7 @@ from agentchat.settings import app_settings
 
 import warnings
 warnings.filterwarnings("ignore")
+
 
 async def register_router(app: FastAPI):
     from agentchat.api.router import router
@@ -44,7 +46,6 @@ def register_middleware(app: FastAPI):
     # 注册白名单中间件
     app.add_middleware(WhitelistMiddleware)
 
-
     return app
 
 
@@ -57,29 +58,40 @@ async def init_config():
     await init_default_agent()
     await update_system_mcp_server()
 
+
 def print_logo():
     from pyfiglet import Figlet
 
     f = Figlet(font="slant")
     print(f.renderText("Agent Chat"))
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # 启动前执行
-    await init_config()
-    await register_router(app)
-    print_logo()
-    yield
-    # 关闭时执行
-    # pass
-
 
 def create_app():
     app = FastAPI(title=app_settings.server.get("project_name", "AgentChat"),
-                  version=app_settings.server.get("version", "v2.2.0"),
-                  lifespan=lifespan)
+                  version=app_settings.server.get("version", "v2.2.0"))
 
     app = register_middleware(app)
+
+    # 注册 Prometheus 监控（在路由注册之前初始化）
+    instrumentator = Instrumentator(
+        should_group_status_codes=False,
+        should_ignore_untemplated=True,
+        should_respect_env_var=False,
+        should_instrument_requests_inprogress=True,
+        excluded_handlers=["/metrics", "/health",
+                           "/docs", "/openapi.json", "/static/*"],
+        inprogress_name="http_requests_inprogress",
+        inprogress_labels=True,
+    )
+    instrumentator.instrument(app)
+
+    @app.on_event("startup")
+    async def startup_event():
+        await init_config()
+        await register_router(app)
+        print_logo()
+        # 在路由注册后暴露 metrics 端点
+        instrumentator.expose(app, endpoint="/metrics", include_in_schema=False)
 
     from agentchat.api.JWT import Settings
 
@@ -105,7 +117,7 @@ def create_app():
         logger.error(f"全局异常处理器捕获异常: {exc}")
         logger.error(f"异常类型: {type(exc)}")
         logger.error(f"异常堆栈: {traceback.format_exc()}")
-        
+
         # 返回友好的错误响应，避免服务崩溃
         return JSONResponse(
             status_code=500,
