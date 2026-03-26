@@ -7,11 +7,13 @@ from agentchat.schema.lingseek import LingSeekGuidePrompt, LingSeekGuidePromptFe
 from agentchat.schema.usage_stats import UsageStatsAgentType
 from agentchat.services.lingseek.agent import LingSeekAgent
 from agentchat.utils.contexts import set_user_id_context, set_agent_name_context
+from agentchat.services.metrics import track_agent_execution
 
 router = APIRouter(prefix="/workspace/lingseek", tags=["LingSeek"])
 
 
 @router.post("/guide_prompt", summary="生成灵寻的指导提示")
+@track_agent_execution(agent_type="lingseek")
 async def generate_lingseek_guide_prompt(*,
                                          lingseek_info: LingSeekGuidePrompt,
                                          login_user: UserPayload = Depends(get_login_user)):
@@ -59,9 +61,10 @@ async def generate_lingseek_tasks(*,
 
 
 @router.post("/task_start", summary="灵寻开始执行任务")
+@track_agent_execution(agent_type="lingseek")
 async def submit_lingseek_task(*,
-                            task: LingSeekTask,
-                            login_user: UserPayload = Depends(get_login_user)):
+                               task: LingSeekTask,
+                               login_user: UserPayload = Depends(get_login_user)):
     # 设置全局变量统计调用
     set_user_id_context(login_user.user_id)
     set_agent_name_context(UsageStatsAgentType.lingseek_agent)

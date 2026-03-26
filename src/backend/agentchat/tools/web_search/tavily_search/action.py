@@ -3,11 +3,13 @@ from langchain.tools import tool
 from tavily import TavilyClient
 
 from agentchat.settings import app_settings
+from agentchat.services.metrics import track_tool_call, track_external_api
 
 
 tavily_client = TavilyClient(app_settings.tools.tavily.get("api_key"))
 
 @tool("web_search", parse_docstring=True)
+@track_tool_call(tool_name="tavily_search")
 def tavily_search(query: str,
                   topic: Optional[str],
                   max_results: Optional[int],
@@ -26,6 +28,7 @@ def tavily_search(query: str,
     """
     return _tavily_search(query, topic, max_results, time_range)
 
+@track_external_api(service="tavily", endpoint="search")
 def _tavily_search(query, topic, max_results, time_range):
     """使用Tavily搜索工具给用户进行搜索"""
     response = tavily_client.search(
