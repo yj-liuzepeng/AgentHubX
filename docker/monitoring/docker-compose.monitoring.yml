@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      - GF_DEFAULT_INSTANCE_NAME=AgentChat监控
+      - GF_SERVER_DOMAIN=localhost
+      # 中文语言配置
+      - GF_DEFAULT_LANGUAGE=zh-Hans
+      - GF_DATE_FORMATS_FULL_DATE=YYYY年MM月DD日 HH:mm:ss
+      - GF_DATE_FORMATS_INTERVAL_SECOND=HH:mm:ss
+      - GF_DATE_FORMATS_INTERVAL_MINUTE=HH:mm
+      - GF_DATE_FORMATS_INTERVAL_HOUR=MM月DD日 HH:mm
+      - GF_DATE_FORMATS_INTERVAL_DAY=MM月DD日
+      - GF_DATE_FORMATS_INTERVAL_MONTH=YYYY年MM月
+      - GF_DATE_FORMATS_INTERVAL_YEAR=YYYY年
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning/custom.ini:/etc/grafana/grafana.ini:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/docker)($$|/)"
+    volumes:
+      - /:/host:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring
+    pid: host
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  monitoring:
+    driver: bridge

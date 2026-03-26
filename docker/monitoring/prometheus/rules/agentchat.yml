@@ -1,0 +1,163 @@
+groups:
+  - name: agentchat-alerts
+    rules:
+      # API 高错误率告警
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: agentchat-api
+        annotations:
+          summary: "AgentChat API 错误率过高"
+          description: "API 错误率在过去 5 分钟内超过 5%，当前值: {{ $value | humanizePercentage }}"
+          runbook_url: "https://wiki.example.com/runbooks/high-error-rate"
+
+      # API 高延迟告警
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: agentchat-api
+        annotations:
+          summary: "AgentChat API 延迟过高"
+          description: "API P95 延迟在过去 5 分钟内超过 5 秒，当前值: {{ $value | humanizeDuration }}"
+
+      # API 服务不可用告警
+      - alert: APIDown
+        expr: up{job="agentchat-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: agentchat-api
+        annotations:
+          summary: "AgentChat API 服务不可用"
+          description: "API 服务已经连续 1 分钟无法访问"
+
+      # LLM 调用失败告警
+      - alert: LLMHighErrorRate
+        expr: |
+          (
+            sum(rate(llm_requests_total{status="error"}[10m]))
+            /
+            sum(rate(llm_requests_total[10m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: llm
+        annotations:
+          summary: "LLM 调用错误率过高"
+          description: "LLM API 错误率在过去 10 分钟内超过 10%，当前值: {{ $value | humanizePercentage }}"
+
+      # LLM 调用延迟过高
+      - alert: LLMHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(llm_request_duration_seconds_bucket[10m])) by (le)
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: llm
+        annotations:
+          summary: "LLM 调用延迟过高"
+          description: "LLM P95 延迟在过去 10 分钟内超过 30 秒，当前值: {{ $value | humanizeDuration }}"
+
+      # Agent 执行失败告警
+      - alert: AgentExecutionFailures
+        expr: |
+          (
+            sum(rate(agent_executions_total{status="error"}[10m]))
+            /
+            sum(rate(agent_executions_total[10m]))
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: agent
+        annotations:
+          summary: "Agent 执行失败率过高"
+          description: "Agent 执行失败率在过去 10 分钟内超过 20%，当前值: {{ $value | humanizePercentage }}"
+
+      # 外部 API 不可用告警
+      - alert: ExternalAPIDown
+        expr: |
+          (
+            sum(rate(external_api_calls_total{status="error"}[5m]))
+            /
+            sum(rate(external_api_calls_total[5m]))
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: critical
+          service: external-api
+        annotations:
+          summary: "外部 API 错误率过高"
+          description: "外部 API 错误率在过去 5 分钟内超过 50%，当前值: {{ $value | humanizePercentage }}"
+
+      # 工具调用失败告警
+      - alert: ToolCallFailures
+        expr: |
+          (
+            sum(rate(tool_calls_total{status="error"}[10m]))
+            /
+            sum(rate(tool_calls_total[10m]))
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          service: tool
+        annotations:
+          summary: "工具调用失败率过高"
+          description: "工具调用失败率在过去 10 分钟内超过 30%，当前值: {{ $value | humanizePercentage }}"
+
+      # 主机资源告警
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "内存使用率过高"
+          description: "主机 {{ $labels.instance }} 内存使用率超过 85%，当前值: {{ $value | humanizePercentage }}"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "CPU 使用率过高"
+          description: "主机 {{ $labels.instance }} CPU 使用率超过 80%，当前值: {{ $value | humanizePercentage }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: infrastructure
+        annotations:
+          summary: "磁盘空间不足"
+          description: "主机 {{ $labels.instance }} 磁盘可用空间低于 10%，当前值: {{ $value | humanizePercentage }}"
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: infrastructure
+        annotations:
+          summary: "磁盘空间严重不足"
+          description: "主机 {{ $labels.instance }} 磁盘可用空间低于 5%，当前值: {{ $value | humanizePercentage }}"
